@@ -16,3 +16,6 @@ experimental:
   localPlugins:
     treblle:
       moduleName: github.com/momo-gg/rust-http-wasm
+
+log:
+  level: DEBUG

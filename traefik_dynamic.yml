@@ -3,7 +3,7 @@ http:
         treblle-middleware:
             plugin:
                 treblle:
-                    headerName: X-Treblle
+                    treblleApiUrl: "http://treblle-api:3002/api"
 
     routers:
         consumer:

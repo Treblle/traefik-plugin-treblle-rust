@@ -1,6 +1,14 @@
 displayName: Treblle Middleware
+
+# For now, `middleware` is the only type available.
 type: middleware
+
 runtime: wasm
-summary: A middleware plugin for logging requests and responses
+
+summary: A middleware plugin for logging requests and responses to Treblle API
+
+# Configuration data for your plugin.
+# This is mandatory, and Plugins Catalog will try to execute the plugin with the data you provide as part of its startup validity tests.
+# No idea why Traefik calls this "testData" instead of "configuration" or something legit.
 testData:
-  headerName: X-Treblle
+  treblleApiUrl: "http://treblle-api:3002/api"

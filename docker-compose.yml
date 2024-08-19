@@ -47,6 +47,17 @@ services:
     networks:
       - treblle-network
 
+  treblle-api:
+    build:
+      context: ./treblle-api
+      dockerfile: Dockerfile
+      args:
+        - RUST_VERSION=${RUST_VERSION}
+    ports:
+      - "3002:3002"
+    networks:
+      - treblle-network
+
 networks:
   treblle-network:
     name: treblle-network
