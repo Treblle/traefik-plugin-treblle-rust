@@ -1,0 +1,52 @@
+services:
+  traefik:
+    image: traefik:v3.1
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--experimental.localPlugins.treblle.moduleName=github.com/momo-gg/rust-http-wasm"
+      - "--log.level=DEBUG"
+    ports:
+      - "80:80"
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik_dynamic.yml:/etc/traefik/traefik_dynamic.yml:ro
+      - ./plugins-local:/plugins-local:ro
+    networks:
+      - treblle-network
+
+  producer:
+    build:
+      context: ./producer
+      dockerfile: Dockerfile
+      args:
+        - RUST_VERSION=${RUST_VERSION}
+    environment:
+      - CONSUMER_URL=http://traefik/consume
+    depends_on:
+      - traefik
+      - consumer
+    networks:
+      - treblle-network
+
+  consumer:
+    build:
+      context: ./consumer
+      dockerfile: Dockerfile
+      args:
+        - RUST_VERSION=${RUST_VERSION}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.consumer.rule=PathPrefix(`/consume`)"
+      - "traefik.http.services.consumer.loadbalancer.server.port=3000"
+      - "traefik.http.routers.consumer.middlewares=treblle-middleware@file"
+    networks:
+      - treblle-network
+
+networks:
+  treblle-network:
+    name: treblle-network

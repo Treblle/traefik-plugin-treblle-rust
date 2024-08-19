@@ -1,0 +1,19 @@
+http:
+    middlewares:
+        treblle-middleware:
+            plugin:
+                treblle:
+                    headerName: X-Treblle
+
+    routers:
+        consumer:
+            rule: "PathPrefix(`/consume`)"
+            service: consumer-service
+            middlewares:
+                - treblle-middleware
+
+    services:
+        consumer-service:
+            loadBalancer:
+                servers:
+                    - url: "http://consumer:3000"

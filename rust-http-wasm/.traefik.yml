@@ -1,0 +1,6 @@
+displayName: Treblle Middleware
+type: middleware
+runtime: wasm
+summary: A middleware plugin for logging requests and responses
+testData:
+  headerName: X-Treblle

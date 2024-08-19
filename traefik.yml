@@ -1,0 +1,18 @@
+api:
+  insecure: true
+  dashboard: true
+
+entryPoints:
+  web:
+    address: ":80"
+
+providers:
+  file:
+    filename: /etc/traefik/traefik_dynamic.yml
+  docker:
+    exposedByDefault: false
+
+experimental:
+  localPlugins:
+    treblle:
+      moduleName: github.com/momo-gg/rust-http-wasm

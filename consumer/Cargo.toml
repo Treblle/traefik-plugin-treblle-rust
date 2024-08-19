@@ -1,0 +1,9 @@
+[package]
+    name    = "consumer"
+    version = "0.1.0"
+    edition = "2021"
+
+[dependencies]
+    axum       = "0.6.18"
+    tokio      = { version = "1.28.0", features = ["full"] }
+    serde_json = "1.0.96"
