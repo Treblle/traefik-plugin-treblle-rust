@@ -1,7 +1,6 @@
 package traefik:http-handler;
 
 interface handler {
-    set-config: func(treblle-api-url: string);
     handle-request: func() -> s64;
     handle-response: func(req-ctx: s32, is-error: s32);
 }

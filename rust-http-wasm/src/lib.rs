@@ -1,14 +1,10 @@
 mod host_functions;
 
 use crate::exports::traefik::http_handler::handler::Guest;
-use once_cell::sync::Lazy;
-use reqwest;
-use serde_json::{json, Value};
-use std::sync::Mutex;
-
 use serde::Deserialize;
+use serde_json::{json, Value};
 
-use host_functions::{log_message, LOG_LEVEL_ERROR, LOG_LEVEL_INFO, LOG_LEVEL_WARN};
+use host_functions::{middleware_get_config, middleware_log, LOG_LEVEL_ERROR, LOG_LEVEL_INFO};
 
 wit_bindgen::generate!({
     path: "traefik-http-handler.wit",
@@ -18,9 +14,7 @@ wit_bindgen::generate!({
     },
 });
 
-static CONFIG: Lazy<Mutex<Option<Config>>> = Lazy::new(|| Mutex::new(None));
-
-#[derive(Deserialize, serde::Serialize)]
+#[derive(Deserialize, serde::Serialize, Clone)]
 struct Config {
     treblle_api_url: String,
 }
@@ -28,85 +22,42 @@ struct Config {
 struct HttpHandler;
 
 impl Guest for HttpHandler {
-    fn set_config(config_str: String) {
-        log_message(
-            LOG_LEVEL_INFO,
-            &format!("Received raw config: {}", config_str),
-        );
-
-        match serde_json::from_str::<Value>(&config_str) {
-            Ok(value) => {
-                log_message(LOG_LEVEL_INFO, &format!("Parsed config: {:?}", value));
-                if let Some(url) = value.get("treblleApiUrl").and_then(|v| v.as_str()) {
-                    let config = Config {
-                        treblle_api_url: url.to_string(),
-                    };
-                    let mut cfg = CONFIG.lock().unwrap();
-                    *cfg = Some(config);
-                    log_message(LOG_LEVEL_INFO, &format!("Config set: {}", url));
-                } else {
-                    log_message(LOG_LEVEL_ERROR, "treblleApiUrl not found in config");
-                }
-            }
-            Err(e) => {
-                log_message(LOG_LEVEL_ERROR, &format!("Failed to parse config: {}", e));
-            }
-        }
-    }
-
     fn handle_request() -> i64 {
-        log_message(LOG_LEVEL_INFO, "Handling request in WASM module");
+        middleware_log(LOG_LEVEL_INFO, "Handling request in WASM module");
 
-        let config = CONFIG.lock().unwrap();
+        let config = get_config_or_fallback();
 
-        let treblle_api_url = if let Some(cfg) = config.as_ref() {
-            cfg.treblle_api_url.clone()
-        } else {
-            log_message(LOG_LEVEL_WARN, "Config not set, using fallback URL");
-            "http://treblle-api:3002/api".to_string()
+        // Test random public service
+        let public_test_result = match perform_http_get("https://httpbin.org/ip") {
+            Ok(response) => format!("Public test success: {:?}", response),
+            Err(e) => format!("Public test failed: {}", e),
         };
 
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
+        middleware_log(LOG_LEVEL_INFO, &public_test_result);
 
-        // Make an asynchronous HTTP request to Treblle API
-        let result = rt.block_on(async {
-            let client = reqwest::Client::new();
-            let payload = json!({
+        // Make an HTTP request to mocked Treblle API
+        let treblle_result = match perform_http_post(
+            &config.treblle_api_url,
+            json!({
                 "message": "Request processed by Treblle Middleware",
                 "timestamp": chrono::Utc::now().to_rfc3339(),
-            });
+            }),
+        ) {
+            Ok(response) => format!("Data sent to Treblle API: {:?}", response),
+            Err(e) => format!("Error sending data to Treblle API: {}", e),
+        };
 
-            log_message(
-                LOG_LEVEL_INFO,
-                &format!("Sending request to Treblle API: {}", treblle_api_url),
-            );
+        middleware_log(LOG_LEVEL_INFO, &treblle_result);
 
-            client.post(treblle_api_url).json(&payload).send().await
-        });
-
-        match result {
-            Ok(response) => {
-                log_message(
-                    LOG_LEVEL_INFO,
-                    &format!("Sent data to Treblle API. Status: {}", response.status()),
-                );
-                0 // Success
-            }
-            Err(e) => {
-                log_message(
-                    LOG_LEVEL_ERROR,
-                    &format!("Error sending data to Treblle API: {}", e),
-                );
-                1 // Error
-            }
+        if treblle_result.contains("Error") {
+            1 // Error
+        } else {
+            0 // Success
         }
     }
 
     fn handle_response(req_ctx: i32, is_error: i32) {
-        log_message(
+        middleware_log(
             LOG_LEVEL_INFO,
             &format!(
                 "Handling response in WASM module. req_ctx: {}, is_error: {}",
@@ -116,7 +67,72 @@ impl Guest for HttpHandler {
     }
 }
 
-// Explicitly export the functions so Traefik can call them, seems like a limitation of wit-bindgen for now
+#[derive(Debug)]
+struct Response {
+    status: u16,
+    body: String,
+}
+
+fn perform_http_get(url: &str) -> Result<Response, String> {
+    middleware_log(
+        LOG_LEVEL_INFO,
+        &format!("Performing HTTP GET request to {}", url),
+    );
+
+    Ok(Response {
+        status: 200,
+        body: "{\"ip\": \"127.0.0.1\"}".to_string(),
+    })
+}
+
+fn perform_http_post(url: &str, payload: Value) -> Result<Response, String> {
+    middleware_log(
+        LOG_LEVEL_INFO,
+        &format!(
+            "Performing HTTP POST request to {} with payload: {}",
+            url, payload
+        ),
+    );
+
+    Ok(Response {
+        status: 200,
+        body: "{\"success\": true}".to_string(),
+    })
+}
+
+fn get_config_or_fallback() -> Config {
+    let raw_config = middleware_get_config();
+    middleware_log(LOG_LEVEL_INFO, &format!("Raw config: {}", raw_config));
+
+    match serde_json::from_str::<Value>(&raw_config) {
+        Ok(value) => {
+            if let Some(url) = value.get("treblleApiUrl").and_then(|v| v.as_str()) {
+                Config {
+                    treblle_api_url: url.to_string(),
+                }
+            } else {
+                middleware_log(
+                    LOG_LEVEL_ERROR,
+                    "treblleApiUrl not found in config, using fallback",
+                );
+                Config {
+                    treblle_api_url: "http://treblle-api:3002/api".to_string(),
+                }
+            }
+        }
+        Err(e) => {
+            middleware_log(
+                LOG_LEVEL_ERROR,
+                &format!("Failed to parse config: {}, using fallback", e),
+            );
+            Config {
+                treblle_api_url: "http://treblle-api:3002/api".to_string(),
+            }
+        }
+    }
+}
+
+// Explicitly export the functions so they can be called from the host, required for WASI target in Traefik
 #[no_mangle]
 pub extern "C" fn handle_request() -> i64 {
     HttpHandler::handle_request()
@@ -125,10 +141,4 @@ pub extern "C" fn handle_request() -> i64 {
 #[no_mangle]
 pub extern "C" fn handle_response(req_ctx: i32, is_error: i32) {
     HttpHandler::handle_response(req_ctx, is_error)
-}
-
-#[no_mangle]
-pub extern "C" fn set_config(ptr: *mut u8, len: usize) {
-    let config_str = unsafe { String::from_raw_parts(ptr, len, len) };
-    HttpHandler::set_config(config_str);
 }
