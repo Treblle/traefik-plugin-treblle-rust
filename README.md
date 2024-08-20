@@ -1,12 +1,25 @@
 # Treblle's Traefik (`^v3.1`) Middleware Plugin in Rust and WebAssembly
 
-This project implements a Traefik v3 middleware plugin using Rust and WebAssembly (WASM). The plugin intercepts HTTP requests, processes them, and forwards relevant data to the Treblle API for monitoring and analysis.
+## Overview
+
+This project provides a middleware plugin for Traefik that integrates Treblle's API monitoring and logging services. The plugin collects data from Traefik's request/response lifecycle, masks sensitive information, and sends the sanitized data to Treblle's API for monitoring. This plugin is designed to be lightweight, efficient, and easy to install through the Traefik catalog.
+
+## Features
+
+- **Data Ingestion:** Captures request and response data from Traefik and sends it to Treblle via a POST request in JSON format.
+- **Sensitive Data Masking:** Automatically masks sensitive data such as passwords, credit card numbers, and other user-defined fields before sending data to Treblle.
+  - **Customizable Masking:** Users can define additional custom keywords for masking sensitive data.
+- **Route Blacklisting:** Allows users to define specific routes or regex patterns to exclude from data collection and reporting.
+- **Silent Error Handling:** Ensures that any errors in the plugin do not interfere with the host application's functionality.
+- **Fire-and-Forget:** The plugin sends data without waiting for a response, ensuring minimal impact on performance.
+- **WASM-WASI1P Compatible**: Built using WebAssembly (WASM) for high performance and compatibility with support for outgoing HTTP requests.
 
 ## Project Structure
 
 The project consists of several components:
 
-1. **Traefik Middleware Plugin (`rust-http-wasm`)**: A Rust-based WASM module that integrates with Traefik v3.
+1. **Traefik Middleware Plugin (`rust-http-wasm`)**: A Rust-based WASM module that integrates with Traefik v3.1 or newer.
+   - This version is important because Traefik v3.1 introduced enhanced support for WASM plugins required by this project.
 1. **Producer Service (`producer`)**: Generates various HTTP requests, including JSON, plain text, and XML.
 1. **Consumer Service (`consumer`)**: Receives and processes the requests, including handling different routes.
 1. **Treblle API (`treblle-api`)**: A mock API that receives and logs the processed data.
@@ -88,14 +101,28 @@ The plugin configuration is located in `traefik_dynamic.yml` under the `http.mid
 - `projectId`: Your Treblle project ID
 - `routeBlacklist`: List of routes to exclude from processing (e.g., ["/blacklisted-example"])
 - `sensitiveKeysRegex`: Regex pattern for masking sensitive data
-- `allowedContentType`: Content type to process (default: "application/json")
+
+#### Example configuration
+
+```yml
+http:
+  middlewares:
+    my-treblle-middleware:
+      plugin:
+        treblle:
+            apiKey: "your_api_key_here"
+            projectId: "your_project_id_here"
+            routeBlacklist:
+               ["/ping", "/healthcheck", "/blacklisted-example"]
+            sensitiveKeysRegex: "(?i)(password|pwd|secret|password_confirmation|cc|card_number|ccv|ssn|credit_score)"
+```
 
 ## Usage
 
 Once the services are running:
 
 1. The Producer service will start generating random HTTP requests to the Consumer service, including:
-   - JSON requests to `/consume`
+   - JSON requests (with and without sensitive payloads) to `/consume`
    - Plain text requests to `/consume`
    - XML requests to `/consume`
    - JSON requests to `/blacklisted-example` (which should be ignored by the middleware)
