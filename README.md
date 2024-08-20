@@ -103,27 +103,67 @@ You can monitor the Traefik dashboard at `http://localhost:8080/dashboard` and c
 To update the Rust version used in the project:
 
 1. Modify the `RUST_VERSION` in the `.env` file.
-2. Run `make generate-rust-toolchain` to update the `rust-toolchain.toml` file.
-3. Run `make check-rust-version` to verify the installed Rust version.
+1. Run `make generate-rust-toolchain` to update the `rust-toolchain.toml` file.
+1. Run `make check-rust-version` to verify the installed Rust version.
 
 ### Modifying the WASM Plugin
 
 The WASM plugin source code is located in the `rust-http-wasm` directory. After making changes:
 
 1. Run `make build-plugin` to rebuild the plugin.
-2. Run `make validate-plugin` to ensure the required exports are present.
-3. Use `make restart` to apply the changes to the running services.
+1. Run `make validate-plugin` to ensure the required exports are present.
+1. Use `make restart` to apply the changes to the running services.
+
+## Request Body Handling
+
+The middleware plugin implements a specific pattern for handling request bodies, which is important to understand:
+
+1. **Reading the Request Body**:
+   The middleware reads the request body using the `host_read_request_body` function. This operation "consumes" the body, meaning it's no longer available for subsequent middleware or the final handler (Consumer service).
+
+1. **Processing the Body**:
+   After reading, the body is processed (e.g., sent to the Treblle API for analysis).
+
+1. **Writing the Body Back**:
+   To ensure the original request body is available for the rest of the request processing pipeline, the middleware writes the body back using the `host_write_request_body` function.
+
+### Why is this necessary?
+
+- **Body Consumption**: In many HTTP proxy systems, reading the body often involves buffering the entire content, which can be resource-intensive for large payloads. Once read, the original stream is typically closed to free up resources.
+
+- **WASM Module Isolation**: The WASM module runs in an isolated environment. Reading the body copies the data into the module's memory, triggering the consumption in the host environment (Traefik).
+
+- **Preserving Original Behavior**: By writing the body back, we ensure that subsequent middleware and the final handler can access the body content, maintaining the expected behavior of the HTTP request.
+
+### Implementation Details
+
+The relevant code for this process is in the `handle_request` function:
+
+```rust
+let body = host_read_request_body().unwrap_or_else(|_| "{}".to_string());
+
+// ... process the body ...
+
+if let Err(e) = host_write_request_body(body.as_bytes()) {
+    host_log(
+        LOG_LEVEL_ERROR,
+        &format!("Error setting request body back: {}", e),
+    );
+}
+```
+
+This pattern allows the middleware to inspect and potentially modify the body while ensuring that the original (or modified) body is still available for the rest of the request processing pipeline.
 
 ## Troubleshooting
 
 If you encounter any issues:
 
 1. Check the logs of each service using `docker-compose logs [service_name]`.
-2. Ensure all services are running with `docker-compose ps`.
-3. Verify the Traefik configuration in `traefik.yml` and `traefik_dynamic.yml`.
-4. Check the Rust code in the middleware and Treblle API for any errors.
-5. Run `make check-rust-version` to ensure you're using the correct Rust version.
-6. If you've modified the WASM plugin, run `make validate-plugin` to check for required exports.
+1. Ensure all services are running with `docker-compose ps`.
+1. Verify the Traefik configuration in `traefik.yml` and `traefik_dynamic.yml`.
+1. Check the Rust code in the middleware and Treblle API for any errors.
+1. Run `make check-rust-version` to ensure you're using the correct Rust version.
+1. If you've modified the WASM plugin, run `make validate-plugin` to check for required exports.
 
 ## Contributing
 
