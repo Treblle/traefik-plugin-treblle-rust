@@ -1,10 +1,12 @@
 # Treblle's Traefik (`^v3.1`) Middleware Plugin in Rust and WebAssembly
 
+A middleware plugin for Traefik that integrates Treblle's API monitoring and logging services.
+
 ## Overview
 
-This project provides a middleware plugin for Traefik that integrates Treblle's API monitoring and logging services. The plugin collects data from Traefik's request/response lifecycle, masks sensitive information, and sends the sanitized data to Treblle's API for monitoring. This plugin is designed to be lightweight, efficient, and easy to install through the Traefik catalog.
+The plugin collects data from Traefik's request/response lifecycle, masks sensitive information, and sends the sanitized data to Treblle's API for monitoring. This plugin is designed to be lightweight, efficient, and easy to install through the Traefik catalog.
 
-## Features
+### Features
 
 - **Data Ingestion:** Captures request and response data from Traefik and sends it to Treblle via a POST request in JSON format.
 - **Sensitive Data Masking:** Automatically masks sensitive data such as passwords, credit card numbers, and other user-defined fields before sending data to Treblle.
