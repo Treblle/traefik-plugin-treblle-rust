@@ -39,8 +39,8 @@ The project consists of several components:
 1. Clone this repository:
 
    ```sh
-   git clone https://github.com/your-repo/treblle-traefik-plugin.git
-   cd treblle-traefik-plugin
+   git clone git@github.com:momo-gg/traefik-rust-http-wasm-middleware-treblle.git
+   cd traefik-rust-http-wasm-middleware-treblle
    ```
 
 1. Install required tools:
