@@ -10,7 +10,7 @@ pub struct TrebllePayload {
     pub data: PayloadData,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 pub struct PayloadData {
     pub server: ServerInfo,
     pub language: LanguageInfo,
@@ -19,7 +19,7 @@ pub struct PayloadData {
     pub errors: Vec<ErrorInfo>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 pub struct ServerInfo {
     pub ip: String,
     pub timezone: String,
@@ -29,20 +29,20 @@ pub struct ServerInfo {
     pub os: OsInfo,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 pub struct OsInfo {
     pub name: String,
     pub release: String,
     pub architecture: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 pub struct LanguageInfo {
     pub name: String,
     pub version: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 pub struct RequestInfo {
     pub timestamp: String,
     pub ip: String,
@@ -53,7 +53,7 @@ pub struct RequestInfo {
     pub body: serde_json::Value,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 pub struct ResponseInfo {
     pub headers: HashMap<String, String>,
     pub code: u16,
@@ -69,4 +69,16 @@ pub struct ErrorInfo {
     pub message: String,
     pub file: String,
     pub line: u32,
+}
+
+impl Default for ErrorInfo {
+    fn default() -> Self {
+        ErrorInfo {
+            source: String::new(),
+            r#type: String::new(),
+            message: String::new(),
+            file: String::new(),
+            line: 0,
+        }
+    }
 }

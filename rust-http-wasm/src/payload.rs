@@ -1,5 +1,6 @@
 use crate::config::Config;
 use crate::schema::*;
+use anyhow::{Error, Result};
 use chrono::Utc;
 use regex::Regex;
 use serde_json::Value;
@@ -12,9 +13,10 @@ pub struct Payload {
 
 impl Payload {
     pub fn new(config: &Config) -> Self {
-        let sensitive_keys_regex = Regex::new(&config.sensitive_keys_regex).unwrap_or_else(|_| {
-            Regex::new(r"(?i)(password|pwd|secret|password_confirmation|cc|card_number|ccv|ssn|credit_score)").unwrap()
-        });
+        let sensitive_keys_regex = Regex::new(&config.sensitive_keys_regex)
+            .unwrap_or_else(|_| {
+                Regex::new(r"(?i)(password|pwd|secret|password_confirmation|cc|card_number|ccv|ssn|credit_score)").unwrap()
+            });
 
         Payload {
             data: TrebllePayload {
@@ -22,41 +24,7 @@ impl Payload {
                 project_id: config.project_id.clone(),
                 version: 0.6,
                 sdk: "rust-wasm".to_string(),
-                data: PayloadData {
-                    server: ServerInfo {
-                        ip: "Unknown".to_string(),
-                        timezone: "UTC".to_string(),
-                        software: "Unknown".to_string(),
-                        signature: "Unknown".to_string(),
-                        protocol: "Unknown".to_string(),
-                        os: OsInfo {
-                            name: "Unknown".to_string(),
-                            release: "Unknown".to_string(),
-                            architecture: "Unknown".to_string(),
-                        },
-                    },
-                    language: LanguageInfo {
-                        name: "Rust".to_string(),
-                        version: env!("CARGO_PKG_VERSION").to_string(),
-                    },
-                    request: RequestInfo {
-                        timestamp: Utc::now().to_rfc3339(),
-                        ip: "Unknown".to_string(),
-                        url: "Unknown".to_string(),
-                        user_agent: "Unknown".to_string(),
-                        method: "Unknown".to_string(),
-                        headers: HashMap::new(),
-                        body: Value::Null,
-                    },
-                    response: ResponseInfo {
-                        headers: HashMap::new(),
-                        code: 0,
-                        size: 0,
-                        load_time: 0.0,
-                        body: Value::Null,
-                    },
-                    errors: vec![],
-                },
+                data: PayloadData::default(),
             },
             sensitive_keys_regex,
         }
@@ -74,7 +42,8 @@ impl Payload {
         self.data.data.request.url = url;
         self.data.data.request.ip = ip;
         self.data.data.request.headers = headers;
-        self.data.data.request.body = serde_json::from_str(&body).unwrap_or(Value::Null);
+        self.data.data.request.body = serde_json::from_str(&body).unwrap_or(Value::String(body));
+        self.data.data.request.timestamp = Utc::now().to_rfc3339();
 
         if let Some(user_agent) = self.data.data.request.headers.get("User-Agent") {
             self.data.data.request.user_agent = user_agent.clone();
@@ -109,8 +78,8 @@ impl Payload {
         }
     }
 
-    pub fn to_json(&self) -> String {
-        serde_json::to_string(&self.data).unwrap()
+    pub fn to_json(&self) -> Result<String> {
+        serde_json::to_string(&self.data).map_err(Error::from)
     }
 }
 

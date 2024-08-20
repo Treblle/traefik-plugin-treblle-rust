@@ -1,3 +1,4 @@
+use anyhow::{Context, Result};
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -17,9 +18,8 @@ pub struct Config {
 
 impl Config {
     pub fn get_or_fallback() -> Self {
-        let raw_config = host_get_config();
-        match serde_json::from_str::<Value>(&raw_config) {
-            Ok(value) => Self::from_value(value),
+        match Self::get() {
+            Ok(config) => config,
             Err(e) => {
                 host_log(
                     LOG_LEVEL_ERROR,
@@ -28,6 +28,13 @@ impl Config {
                 Self::fallback()
             }
         }
+    }
+
+    fn get() -> Result<Self> {
+        let raw_config = host_get_config().context("Failed to get config from host")?;
+        let value: Value =
+            serde_json::from_str(&raw_config).context("Failed to parse config JSON")?;
+        Ok(Self::from_value(value))
     }
 
     fn from_value(value: Value) -> Self {
