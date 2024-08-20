@@ -7,17 +7,17 @@ This project implements a Traefik v3 middleware plugin using Rust and WebAssembl
 The project consists of several components:
 
 1. **Traefik Middleware Plugin (`rust-http-wasm`)**: A Rust-based WASM module that integrates with Traefik v3.
-2. **Producer Service (`producer`)**: Generates random HTTP requests.
-3. **Consumer Service (`consumer`)**: Receives and processes the requests.
-4. **Treblle API (`treblle-api`)**: A mock API that receives and logs the processed data.
+1. **Producer Service (`producer`)**: Generates various HTTP requests, including JSON, plain text, and XML.
+1. **Consumer Service (`consumer`)**: Receives and processes the requests, including handling different routes.
+1. **Treblle API (`treblle-api`)**: A mock API that receives and logs the processed data.
 
 ## Prerequisites
 
 - Docker and Docker Compose
 - Rust (version specified in `.env` file)
-- rustup
+- `rustup`
 - Homebrew (if on macOS)
-- make
+- `make`
 
 ## Setup and Installation
 
@@ -86,15 +86,27 @@ The plugin configuration is located in `traefik_dynamic.yml` under the `http.mid
 - `treblleApiUrl`: URL of the Treblle API
 - `apiKey`: Your Treblle API key
 - `projectId`: Your Treblle project ID
-- `routeBlacklist`: List of routes to exclude from processing
+- `routeBlacklist`: List of routes to exclude from processing (e.g., ["/blacklisted-example"])
 - `sensitiveKeysRegex`: Regex pattern for masking sensitive data
 - `allowedContentType`: Content type to process (default: "application/json")
 
 ## Usage
 
-Once the services are running, the Producer service will start generating random HTTP requests to the Consumer service. The Traefik middleware will intercept these requests, process them, and forward the data to the Treblle API.
+Once the services are running:
 
-You can monitor the Traefik dashboard at `http://localhost:8080/dashboard` and check the logs of each service for more information.
+1. The Producer service will start generating random HTTP requests to the Consumer service, including:
+   - JSON requests to `/consume`
+   - Plain text requests to `/consume`
+   - XML requests to `/consume`
+   - JSON requests to `/blacklisted-example` (which should be ignored by the middleware)
+
+1. The Traefik middleware will intercept these requests, process them, and forward the data to the Treblle API if:
+   - The request is not to a blacklisted route
+   - The content type is JSON
+
+1. The Consumer service will log all received requests, regardless of their processing by the middleware.
+
+1. The Treblle API will receive and log the processed data from valid requests, as well as prepare Prometheus metrics for ingestion.
 
 ## Development
 
@@ -153,6 +165,17 @@ if let Err(e) = host_write_request_body(body.as_bytes()) {
 ```
 
 This pattern allows the middleware to inspect and potentially modify the body while ensuring that the original (or modified) body is still available for the rest of the request processing pipeline.
+
+## Testing
+
+The project includes several test scenarios:
+
+1. **JSON Requests**: Sent to `/consume`, these should be processed by the middleware and forwarded to the Treblle API.
+2. **Non-JSON Requests**: Sent to `/consume`, these should be ignored by the middleware but still reach the Consumer.
+3. **Blacklisted Route**: Requests to `/blacklisted-example` should be ignored by the middleware but reach the Consumer.
+4. **Sensitive Data**: JSON requests containing sensitive information (like passwords or credit card numbers) should be masked before being sent to the Treblle API.
+
+To verify these scenarios, check the logs of the Consumer service and the Treblle API after running the system for a while.
 
 ## Troubleshooting
 

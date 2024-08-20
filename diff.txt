@@ -1,0 +1,533 @@
+diff --git a/rust-http-wasm/Cargo.toml b/rust-http-wasm/Cargo.toml
+index f3d89db..be3888d 100644
+--- a/rust-http-wasm/Cargo.toml
++++ b/rust-http-wasm/Cargo.toml
+@@ -7,16 +7,21 @@
+     crate-type = ["cdylib"]
+ 
+ [dependencies]
+-    wit-bindgen-rt    = { version = "0.27.0", features = ["bitflags"] }
+-    wasmedge_http_req = "0.9"
+-    serde             = { version = "1.0", features = ["derive"] }
+-    serde_json        = "1.0"
+-    chrono            = { version = "0.4", default-features = false, features = ["clock"] }
+-    regex             = "1.5"
+-    anyhow            = "1.0"
++    chrono = { version = "0.4", default-features = false, features = ["clock"] }
++    regex = { version = "1.5", default-features = false, features = ["std"] }
++    serde = { version = "1.0", features = ["derive"], default-features = false }
++    serde_json = { version = "1.0", default-features = false, features = [
++        "std",
++    ] }
++    thiserror = { version = "1.0", default-features = false }
++    wasmedge_http_req = { version = "0.9", default-features = false }
++    wit-bindgen-rt = { version = "0.30.0", features = [
++        "bitflags",
++    ], default-features = false }
+ 
+-# Reduce wasm binary size
+ [profile.release]
+-    lto       = true
+-    opt-level = 's'
+-    strip     = "symbols"
++    lto           = true
++    opt-level     = 'z'
++    codegen-units = 1
++    panic         = 'abort'
++    strip         = true
+diff --git a/rust-http-wasm/src/config.rs b/rust-http-wasm/src/config.rs
+index 09f2a11..39d5858 100644
+--- a/rust-http-wasm/src/config.rs
++++ b/rust-http-wasm/src/config.rs
+@@ -1,11 +1,13 @@
+-use anyhow::{Context, Result};
++use crate::constants::{
++    DEFAULT_ALLOWED_CONTENT_TYPE, DEFAULT_SENSITIVE_KEYS_REGEX, DEFAULT_TREBLLE_API_URL,
++    LOG_LEVEL_ERROR,
++};
++use crate::error::{Result, TreblleError};
++use crate::host_functions::{host_get_config, host_log};
+ use serde::Deserialize;
+ use serde_json::Value;
+ 
+-use crate::constants::LOG_LEVEL_ERROR;
+-use crate::host_functions::{host_get_config, host_log};
+-
+-#[derive(Deserialize, Clone)]
++#[derive(Deserialize, Clone, Debug)]
+ pub struct Config {
+     pub treblle_api_url: String,
+     pub api_key: String,
+@@ -31,33 +33,65 @@ impl Config {
+     }
+ 
+     fn get() -> Result<Self> {
+-        let raw_config = host_get_config().context("Failed to get config from host")?;
+-        let value: Value =
+-            serde_json::from_str(&raw_config).context("Failed to parse config JSON")?;
++        let raw_config =
++            host_get_config().map_err(|e| TreblleError::HostFunction(e.to_string()))?;
++        let value: Value = serde_json::from_str(&raw_config)?;
+         Ok(Self::from_value(value))
+     }
+ 
+     fn from_value(value: Value) -> Self {
+         Config {
+-            treblle_api_url: value.get("treblleApiUrl").and_then(|v| v.as_str()).unwrap_or("http://treblle-api:3002/api").to_string(),
+-            api_key: value.get("apiKey").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+-            project_id: value.get("projectId").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+-            route_blacklist: value.get("routeBlacklist").and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect()).unwrap_or_default(),
+-            sensitive_keys_regex: value.get("sensitiveKeysRegex").and_then(|v| v.as_str()).unwrap_or(r"(?i)(password|pwd|secret|password_confirmation|cc|card_number|ccv|ssn|credit_score)").to_string(),
+-            request_url: value.get("requestUrl").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+-            allowed_content_type: value.get("allowedContentType").and_then(|v| v.as_str()).unwrap_or("").to_string(),
++            treblle_api_url: value
++                .get("treblleApiUrl")
++                .and_then(|v| v.as_str())
++                .unwrap_or(DEFAULT_TREBLLE_API_URL)
++                .to_string(),
++            api_key: value
++                .get("apiKey")
++                .and_then(|v| v.as_str())
++                .unwrap_or("")
++                .to_string(),
++            project_id: value
++                .get("projectId")
++                .and_then(|v| v.as_str())
++                .unwrap_or("")
++                .to_string(),
++            route_blacklist: value
++                .get("routeBlacklist")
++                .and_then(|v| v.as_array())
++                .map(|a| {
++                    a.iter()
++                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
++                        .collect()
++                })
++                .unwrap_or_default(),
++            sensitive_keys_regex: value
++                .get("sensitiveKeysRegex")
++                .and_then(|v| v.as_str())
++                .unwrap_or(DEFAULT_SENSITIVE_KEYS_REGEX)
++                .to_string(),
++            request_url: value
++                .get("requestUrl")
++                .and_then(|v| v.as_str())
++                .unwrap_or("")
++                .to_string(),
++            allowed_content_type: value
++                .get("allowedContentType")
++                .and_then(|v| v.as_str())
++                .unwrap_or(DEFAULT_ALLOWED_CONTENT_TYPE)
++                .to_string(),
+         }
+     }
+ 
+     fn fallback() -> Self {
+         Config {
+-            treblle_api_url: "http://treblle-api:3002/api".to_string(),
++            treblle_api_url: DEFAULT_TREBLLE_API_URL.to_string(),
+             api_key: "".to_string(),
+             project_id: "".to_string(),
+             route_blacklist: vec![],
+-            sensitive_keys_regex: r"(?i)(password|pwd|secret|password_confirmation|cc|card_number|ccv|ssn|credit_score)".to_string(),
++            sensitive_keys_regex: DEFAULT_SENSITIVE_KEYS_REGEX.to_string(),
+             request_url: "".to_string(),
+-            allowed_content_type: "application/json".to_string(),
++            allowed_content_type: DEFAULT_ALLOWED_CONTENT_TYPE.to_string(),
+         }
+     }
+ }
+diff --git a/rust-http-wasm/src/constants.rs b/rust-http-wasm/src/constants.rs
+index 4ebc014..aeedaa1 100644
+--- a/rust-http-wasm/src/constants.rs
++++ b/rust-http-wasm/src/constants.rs
+@@ -2,3 +2,9 @@ pub const LOG_LEVEL_ERROR: i32 = 2;
+ pub const LOG_LEVEL_WARN: i32 = 1;
+ pub const LOG_LEVEL_INFO: i32 = 0;
+ pub const LOG_LEVEL_DEBUG: i32 = -1;
++
++pub const DEFAULT_TREBLLE_API_URL: &str = "http://treblle-api:3002/api";
++pub const DEFAULT_SENSITIVE_KEYS_REGEX: &str =
++    r"(?i)(password|pwd|secret|password_confirmation|cc|card_number|ccv|ssn|credit_score)";
++pub const DEFAULT_ALLOWED_CONTENT_TYPE: &str = "application/json";
++pub const HTTP_TIMEOUT_SECONDS: u64 = 10;
+diff --git a/rust-http-wasm/src/host_functions.rs b/rust-http-wasm/src/host_functions.rs
+index 3acac3a..a024ef3 100644
+--- a/rust-http-wasm/src/host_functions.rs
++++ b/rust-http-wasm/src/host_functions.rs
+@@ -1,4 +1,4 @@
+-use anyhow::{Error, Result};
++use crate::error::{Result, TreblleError};
+ use core::str;
+ use std::ffi::CString;
+ 
+@@ -33,9 +33,13 @@ fn read_from_buffer<F: Fn(*const u8, u32) -> i32>(read_fn: F) -> Result<String>
+             LOG_LEVEL_ERROR,
+             &format!("Failed to read from buffer: {}", len),
+         );
+-        Err(Error::msg("Failed to read from buffer"))
++        Err(TreblleError::HostFunction(
++            "Failed to read from buffer".to_string(),
++        ))
+     } else {
+-        let result = str::from_utf8(&read_buf[0..len as usize])?.to_string();
++        let result = str::from_utf8(&read_buf[0..len as usize])
++            .map_err(|e| TreblleError::HostFunction(e.to_string()))?
++            .to_string();
+         host_log(LOG_LEVEL_INFO, &format!("Read from buffer: {} bytes", len));
+         Ok(result)
+     }
+@@ -127,7 +131,7 @@ pub fn host_get_header_values(header_kind: u32, name: &str) -> Result<String> {
+ 
+     // Create a CString, ignoring null characters
+     let c_name = CString::new(sanitized_name)
+-        .map_err(|e| Error::msg(format!("Invalid header name: {}", e)))?;
++        .map_err(|e| TreblleError::HostFunction(format!("Invalid header name: {}", e)))?;
+ 
+     let result = read_from_buffer(|buf, buf_limit| unsafe {
+         get_header_values(
+diff --git a/rust-http-wasm/src/http_client.rs b/rust-http-wasm/src/http_client.rs
+index 10b5443..8a8b678 100644
+--- a/rust-http-wasm/src/http_client.rs
++++ b/rust-http-wasm/src/http_client.rs
+@@ -1,4 +1,5 @@
+ use crate::constants::{LOG_LEVEL_ERROR, LOG_LEVEL_INFO};
++use crate::error::{Result, TreblleError};
+ use crate::host_functions::host_log;
+ use std::time::Duration;
+ use wasmedge_http_req::{request, uri::Uri};
+@@ -10,7 +11,7 @@ impl HttpClient {
+         HttpClient
+     }
+ 
+-    pub fn send_to_treblle(&self, url: &str, payload: &[u8], api_key: &str) -> Result<(), String> {
++    pub fn send_to_treblle(&self, url: &str, payload: &[u8], api_key: &str) -> Result<()> {
+         let mut writer = Vec::new();
+         let timeout = Duration::from_secs(10); // 10 second timeout
+ 
+@@ -19,7 +20,8 @@ impl HttpClient {
+             &format!("Preparing request to Treblle API: {}", url),
+         );
+ 
+-        let uri = Uri::try_from(url).map_err(|e| format!("Invalid URL: {}", e))?;
++        let uri =
++            Uri::try_from(url).map_err(|e| TreblleError::Http(format!("Invalid URL: {}", e)))?;
+         let mut request = request::Request::new(&uri);
+ 
+         request.method(request::Method::POST);
+@@ -40,13 +42,7 @@ impl HttpClient {
+             .body(payload)
+             .timeout(Some(timeout))
+             .send(&mut writer)
+-            .map_err(|e| {
+-                host_log(
+-                    LOG_LEVEL_ERROR,
+-                    &format!("Failed to send POST request: {}", e),
+-                );
+-                format!("Failed to send POST request: {}", e)
+-            })?;
++            .map_err(|e| TreblleError::Http(format!("Failed to send POST request: {}", e)))?;
+ 
+         host_log(
+             LOG_LEVEL_INFO,
+@@ -67,7 +63,7 @@ impl HttpClient {
+                 response_body
+             );
+             host_log(LOG_LEVEL_ERROR, &error_msg);
+-            Err(error_msg)
++            Err(TreblleError::Http(error_msg))
+         }
+     }
+ }
+diff --git a/rust-http-wasm/src/lib.rs b/rust-http-wasm/src/lib.rs
+index 1774829..1c66aee 100644
+--- a/rust-http-wasm/src/lib.rs
++++ b/rust-http-wasm/src/lib.rs
+@@ -1,15 +1,16 @@
+ mod bindings;
+ mod config;
+ mod constants;
++mod error;
+ mod host_functions;
+ mod http_client;
+ mod payload;
+ mod route_blacklist;
+ mod schema;
+ 
+-use anyhow::Result;
+ use bindings::exports::traefik::http_handler::handler::Guest;
+ use config::Config;
++use error::{Result, TreblleError};
+ use http_client::HttpClient;
+ use payload::{is_json, Payload};
+ use route_blacklist::RouteBlacklist;
+@@ -23,7 +24,10 @@ impl HttpHandler {
+     fn process_request(config: &Config, blacklist: &RouteBlacklist) -> Result<()> {
+         host_log(LOG_LEVEL_INFO, "Starting process_request");
+ 
+-        let uri = host_get_uri().map_err(|e| anyhow::anyhow!("Failed to get URI: {}", e))?;
++        let uri = host_get_uri().map_err(|e| {
++            host_log(LOG_LEVEL_ERROR, &format!("Failed to get URI: {}", e));
++            TreblleError::HostFunction(format!("Failed to get URI: {}", e))
++        })?;
+         host_log(
+             LOG_LEVEL_INFO,
+             &format!("Processing request for URI: {}", uri),
+@@ -37,8 +41,13 @@ impl HttpHandler {
+             return Ok(());
+         }
+ 
+-        let content_type = host_get_header_values(0, "Content-Type")
+-            .map_err(|e| anyhow::anyhow!("Failed to get Content-Type: {}", e))?;
++        let content_type = host_get_header_values(0, "Content-Type").map_err(|e| {
++            host_log(
++                LOG_LEVEL_ERROR,
++                &format!("Failed to get Content-Type: {}", e),
++            );
++            TreblleError::HostFunction(format!("Failed to get Content-Type: {}", e))
++        })?;
+         host_log(LOG_LEVEL_INFO, &format!("Content-Type: {}", content_type));
+ 
+         if !is_json(&content_type) {
+@@ -60,24 +69,35 @@ impl HttpHandler {
+                     LOG_LEVEL_ERROR,
+                     &format!("Failed to read request body: {}", e),
+                 );
+-                return Err(anyhow::anyhow!("Failed to read request body: {}", e));
++                return Err(TreblleError::HostFunction(format!(
++                    "Failed to read request body: {}",
++                    e
++                )));
+             }
+         };
+ 
+-        // Immediately write the body back
+         host_log(LOG_LEVEL_INFO, "Writing request body back");
+-        host_write_request_body(body.as_bytes())
+-            .map_err(|e| anyhow::anyhow!("Failed to write request body back: {}", e))?;
++        if let Err(e) = host_write_request_body(body.as_bytes()) {
++            host_log(
++                LOG_LEVEL_ERROR,
++                &format!("Failed to write request body back: {}", e),
++            );
++            return Err(TreblleError::HostFunction(format!(
++                "Failed to write request body back: {}",
++                e
++            )));
++        }
+ 
+         host_log(
+             LOG_LEVEL_INFO,
+             &format!("Request body length: {}", body.len()),
+         );
+ 
++        host_log(LOG_LEVEL_INFO, "Creating Payload");
+         let mut payload = Payload::new(config);
+         host_log(LOG_LEVEL_INFO, "Populating payload");
+ 
+-        // Get headers, but continue even if it fails
++        host_log(LOG_LEVEL_INFO, "Getting headers");
+         let headers = match Self::get_headers() {
+             Ok(h) => h,
+             Err(e) => {
+@@ -92,44 +112,43 @@ impl HttpHandler {
+             }
+         };
+ 
+-        // Populate payload with available information
+-        let method = host_get_method().unwrap_or_else(|_| "Unknown".to_string());
+-        let ip = host_get_source_addr().unwrap_or_else(|_| "Unknown".to_string());
++        host_log(LOG_LEVEL_INFO, "Getting method");
++        let method = host_get_method().unwrap_or_else(|e| {
++            host_log(
++                LOG_LEVEL_ERROR,
++                &format!("Failed to get method: {}. Using 'Unknown'.", e),
++            );
++            "Unknown".to_string()
++        });
++
++        host_log(LOG_LEVEL_INFO, "Getting source address");
++        let ip = host_get_source_addr().unwrap_or_else(|e| {
++            host_log(
++                LOG_LEVEL_ERROR,
++                &format!("Failed to get source address: {}. Using 'Unknown'.", e),
++            );
++            "Unknown".to_string()
++        });
++
++        host_log(LOG_LEVEL_INFO, "Updating request info in payload");
+         payload.update_request_info(method, uri, ip, headers, body);
+ 
+         host_log(LOG_LEVEL_INFO, "Masking sensitive data");
+         payload.mask_sensitive_data();
+ 
+         host_log(LOG_LEVEL_INFO, "Sending to Treblle");
+-        Self::send_to_treblle(config, &payload)?;
++        if let Err(e) = Self::send_to_treblle(config, &payload) {
++            host_log(
++                LOG_LEVEL_ERROR,
++                &format!("Error sending data to Treblle API: {}", e),
++            );
++            return Err(e);
++        }
+ 
+         host_log(LOG_LEVEL_INFO, "Request processing completed successfully");
+         Ok(())
+     }
+ 
+-    fn populate_payload(payload: &mut Payload, uri: &str, body: &str) -> Result<()> {
+-        host_log(LOG_LEVEL_INFO, "Starting populate_payload");
+-
+-        let method =
+-            host_get_method().map_err(|e| anyhow::anyhow!("Failed to get method: {}", e))?;
+-        host_log(LOG_LEVEL_INFO, &format!("Method: {}", method));
+-
+-        let ip = host_get_source_addr()
+-            .map_err(|e| anyhow::anyhow!("Failed to get source address: {}", e))?;
+-        host_log(LOG_LEVEL_INFO, &format!("Source IP: {}", ip));
+-
+-        let headers =
+-            Self::get_headers().map_err(|e| anyhow::anyhow!("Failed to get headers: {}", e))?;
+-        host_log(
+-            LOG_LEVEL_INFO,
+-            &format!("Number of headers: {}", headers.len()),
+-        );
+-
+-        payload.update_request_info(method, uri.to_string(), ip, headers, body.to_string());
+-        host_log(LOG_LEVEL_INFO, "Payload populated successfully");
+-        Ok(())
+-    }
+-
+     fn get_headers() -> Result<std::collections::HashMap<String, String>> {
+         host_log(LOG_LEVEL_INFO, "Starting get_headers");
+         let mut headers = std::collections::HashMap::new();
+@@ -187,23 +206,18 @@ impl HttpHandler {
+             LOG_LEVEL_INFO,
+             &format!("Sending request to Treblle API: {}", config.treblle_api_url),
+         );
+-        match client.send_to_treblle(
+-            &config.treblle_api_url,
+-            payload_json.as_bytes(),
+-            &config.api_key,
+-        ) {
+-            Ok(_) => {
+-                host_log(LOG_LEVEL_INFO, "Data sent successfully to Treblle API");
+-                Ok(())
+-            }
+-            Err(e) => {
+-                host_log(
+-                    LOG_LEVEL_ERROR,
+-                    &format!("Error sending data to Treblle API: {}", e),
+-                );
+-                Err(anyhow::anyhow!("Failed to send data to Treblle API: {}", e))
+-            }
+-        }
++        client
++            .send_to_treblle(
++                &config.treblle_api_url,
++                payload_json.as_bytes(),
++                &config.api_key,
++            )
++            .map_err(|e| {
++                TreblleError::Http(format!("Failed to send data to Treblle API: {}", e))
++            })?;
++
++        host_log(LOG_LEVEL_INFO, "Data sent successfully to Treblle API");
++        Ok(())
+     }
+ }
+ 
+diff --git a/rust-http-wasm/src/payload.rs b/rust-http-wasm/src/payload.rs
+index e554700..5eea245 100644
+--- a/rust-http-wasm/src/payload.rs
++++ b/rust-http-wasm/src/payload.rs
+@@ -1,6 +1,6 @@
+ use crate::config::Config;
++use crate::error::Result;
+ use crate::schema::*;
+-use anyhow::{Error, Result};
+ use chrono::Utc;
+ use regex::Regex;
+ use serde_json::Value;
+@@ -79,7 +79,7 @@ impl Payload {
+     }
+ 
+     pub fn to_json(&self) -> Result<String> {
+-        serde_json::to_string(&self.data).map_err(Error::from)
++        serde_json::to_string(&self.data).map_err(Into::into)
+     }
+ }
+ 
+diff --git a/rust-http-wasm/src/schema.rs b/rust-http-wasm/src/schema.rs
+index f79352b..f4de86c 100644
+--- a/rust-http-wasm/src/schema.rs
++++ b/rust-http-wasm/src/schema.rs
+@@ -1,7 +1,7 @@
+ use serde::{Deserialize, Serialize};
+ use std::collections::HashMap;
+ 
+-#[derive(Serialize, Deserialize)]
++#[derive(Serialize, Deserialize, Debug)]
+ pub struct TrebllePayload {
+     pub api_key: String,
+     pub project_id: String,
+@@ -10,7 +10,7 @@ pub struct TrebllePayload {
+     pub data: PayloadData,
+ }
+ 
+-#[derive(Serialize, Deserialize, Default)]
++#[derive(Serialize, Deserialize, Default, Debug)]
+ pub struct PayloadData {
+     pub server: ServerInfo,
+     pub language: LanguageInfo,
+@@ -19,7 +19,7 @@ pub struct PayloadData {
+     pub errors: Vec<ErrorInfo>,
+ }
+ 
+-#[derive(Serialize, Deserialize, Default)]
++#[derive(Serialize, Deserialize, Default, Debug)]
+ pub struct ServerInfo {
+     pub ip: String,
+     pub timezone: String,
+@@ -29,20 +29,20 @@ pub struct ServerInfo {
+     pub os: OsInfo,
+ }
+ 
+-#[derive(Serialize, Deserialize, Default)]
++#[derive(Serialize, Deserialize, Default, Debug)]
+ pub struct OsInfo {
+     pub name: String,
+     pub release: String,
+     pub architecture: String,
+ }
+ 
+-#[derive(Serialize, Deserialize, Default)]
++#[derive(Serialize, Deserialize, Default, Debug)]
+ pub struct LanguageInfo {
+     pub name: String,
+     pub version: String,
+ }
+ 
+-#[derive(Serialize, Deserialize, Default)]
++#[derive(Serialize, Deserialize, Default, Debug)]
+ pub struct RequestInfo {
+     pub timestamp: String,
+     pub ip: String,
+@@ -53,7 +53,7 @@ pub struct RequestInfo {
+     pub body: serde_json::Value,
+ }
+ 
+-#[derive(Serialize, Deserialize, Default)]
++#[derive(Serialize, Deserialize, Default, Debug)]
+ pub struct ResponseInfo {
+     pub headers: HashMap<String, String>,
+     pub code: u16,
+@@ -62,7 +62,7 @@ pub struct ResponseInfo {
+     pub body: serde_json::Value,
+ }
+ 
+-#[derive(Serialize, Deserialize)]
++#[derive(Serialize, Deserialize, Debug)]
+ pub struct ErrorInfo {
+     pub source: String,
+     pub r#type: String,

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct TrebllePayload {
     pub api_key: String,
     pub project_id: String,
@@ -10,7 +10,7 @@ pub struct TrebllePayload {
     pub data: PayloadData,
 }
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize, Default, Debug)]
 pub struct PayloadData {
     pub server: ServerInfo,
     pub language: LanguageInfo,
@@ -19,7 +19,7 @@ pub struct PayloadData {
     pub errors: Vec<ErrorInfo>,
 }
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize, Default, Debug)]
 pub struct ServerInfo {
     pub ip: String,
     pub timezone: String,
@@ -29,20 +29,20 @@ pub struct ServerInfo {
     pub os: OsInfo,
 }
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize, Default, Debug)]
 pub struct OsInfo {
     pub name: String,
     pub release: String,
     pub architecture: String,
 }
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize, Default, Debug)]
 pub struct LanguageInfo {
     pub name: String,
     pub version: String,
 }
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize, Default, Debug)]
 pub struct RequestInfo {
     pub timestamp: String,
     pub ip: String,
@@ -53,7 +53,7 @@ pub struct RequestInfo {
     pub body: serde_json::Value,
 }
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize, Default, Debug)]
 pub struct ResponseInfo {
     pub headers: HashMap<String, String>,
     pub code: u16,
@@ -62,7 +62,7 @@ pub struct ResponseInfo {
     pub body: serde_json::Value,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct ErrorInfo {
     pub source: String,
     pub r#type: String,

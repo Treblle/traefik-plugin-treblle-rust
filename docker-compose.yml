@@ -31,7 +31,7 @@ services:
       args:
         - RUST_VERSION=${RUST_VERSION}
     environment:
-      - CONSUMER_URL=http://traefik/consume
+      - CONSUMER_URL=http://traefik
       - INTERVAL_DURATION=5
     depends_on:
       - traefik
@@ -47,7 +47,7 @@ services:
         - RUST_VERSION=${RUST_VERSION}
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.consumer.rule=PathPrefix(`/consume`)"
+      - "traefik.http.routers.consumer.rule=PathPrefix(`/`)"
       - "traefik.http.services.consumer.loadbalancer.server.port=3000"
       - "traefik.http.routers.consumer.middlewares=treblle-middleware@file"
     networks:

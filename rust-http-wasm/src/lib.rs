@@ -1,15 +1,16 @@
 mod bindings;
 mod config;
 mod constants;
+mod error;
 mod host_functions;
 mod http_client;
 mod payload;
 mod route_blacklist;
 mod schema;
 
-use anyhow::Result;
 use bindings::exports::traefik::http_handler::handler::Guest;
 use config::Config;
+use error::{Result, TreblleError};
 use http_client::HttpClient;
 use payload::{is_json, Payload};
 use route_blacklist::RouteBlacklist;
@@ -23,7 +24,12 @@ impl HttpHandler {
     fn process_request(config: &Config, blacklist: &RouteBlacklist) -> Result<()> {
         host_log(LOG_LEVEL_INFO, "Starting process_request");
 
-        let uri = host_get_uri().map_err(|e| anyhow::anyhow!("Failed to get URI: {}", e))?;
+        let uri = host_get_uri().map_err(|e| {
+            host_log(LOG_LEVEL_ERROR, &format!("Failed to get URI: {}", e));
+
+            TreblleError::HostFunction(format!("Failed to get URI: {}", e))
+        })?;
+
         host_log(
             LOG_LEVEL_INFO,
             &format!("Processing request for URI: {}", uri),
@@ -37,8 +43,14 @@ impl HttpHandler {
             return Ok(());
         }
 
-        let content_type = host_get_header_values(0, "Content-Type")
-            .map_err(|e| anyhow::anyhow!("Failed to get Content-Type: {}", e))?;
+        let content_type = host_get_header_values(0, "Content-Type").map_err(|e| {
+            host_log(
+                LOG_LEVEL_ERROR,
+                &format!("Failed to get Content-Type: {}", e),
+            );
+            TreblleError::HostFunction(format!("Failed to get Content-Type: {}", e))
+        })?;
+
         host_log(LOG_LEVEL_INFO, &format!("Content-Type: {}", content_type));
 
         if !is_json(&content_type) {
@@ -47,6 +59,7 @@ impl HttpHandler {
         }
 
         host_log(LOG_LEVEL_INFO, "Starting to read request body");
+
         let body = match host_read_request_body() {
             Ok(body) => {
                 host_log(
@@ -60,24 +73,38 @@ impl HttpHandler {
                     LOG_LEVEL_ERROR,
                     &format!("Failed to read request body: {}", e),
                 );
-                return Err(anyhow::anyhow!("Failed to read request body: {}", e));
+                return Err(TreblleError::HostFunction(format!(
+                    "Failed to read request body: {}",
+                    e
+                )));
             }
         };
 
-        // Immediately write the body back
         host_log(LOG_LEVEL_INFO, "Writing request body back");
-        host_write_request_body(body.as_bytes())
-            .map_err(|e| anyhow::anyhow!("Failed to write request body back: {}", e))?;
+
+        if let Err(e) = host_write_request_body(body.as_bytes()) {
+            host_log(
+                LOG_LEVEL_ERROR,
+                &format!("Failed to write request body back: {}", e),
+            );
+            return Err(TreblleError::HostFunction(format!(
+                "Failed to write request body back: {}",
+                e
+            )));
+        }
 
         host_log(
             LOG_LEVEL_INFO,
             &format!("Request body length: {}", body.len()),
         );
 
-        let mut payload = Payload::new(config);
-        host_log(LOG_LEVEL_INFO, "Populating payload");
+        host_log(LOG_LEVEL_INFO, "Creating Payload");
 
-        // Get headers, but continue even if it fails
+        let mut payload = Payload::new(config);
+
+        host_log(LOG_LEVEL_INFO, "Populating payload");
+        host_log(LOG_LEVEL_INFO, "Getting headers");
+
         let headers = match Self::get_headers() {
             Ok(h) => h,
             Err(e) => {
@@ -92,49 +119,58 @@ impl HttpHandler {
             }
         };
 
-        // Populate payload with available information
-        let method = host_get_method().unwrap_or_else(|_| "Unknown".to_string());
-        let ip = host_get_source_addr().unwrap_or_else(|_| "Unknown".to_string());
+        host_log(LOG_LEVEL_INFO, "Getting method");
+
+        let method = host_get_method().unwrap_or_else(|e| {
+            host_log(
+                LOG_LEVEL_ERROR,
+                &format!("Failed to get method: {}. Using 'Unknown'.", e),
+            );
+            "Unknown".to_string()
+        });
+
+        host_log(LOG_LEVEL_INFO, "Getting source address");
+
+        let ip = host_get_source_addr().unwrap_or_else(|e| {
+            host_log(
+                LOG_LEVEL_ERROR,
+                &format!("Failed to get source address: {}. Using 'Unknown'.", e),
+            );
+
+            "Unknown".to_string()
+        });
+
+        host_log(LOG_LEVEL_INFO, "Updating request info in payload");
+
         payload.update_request_info(method, uri, ip, headers, body);
 
         host_log(LOG_LEVEL_INFO, "Masking sensitive data");
+
         payload.mask_sensitive_data();
 
         host_log(LOG_LEVEL_INFO, "Sending to Treblle");
-        Self::send_to_treblle(config, &payload)?;
+
+        if let Err(e) = Self::send_to_treblle(config, &payload) {
+            host_log(
+                LOG_LEVEL_ERROR,
+                &format!("Error sending data to Treblle API: {}", e),
+            );
+
+            return Err(e);
+        }
 
         host_log(LOG_LEVEL_INFO, "Request processing completed successfully");
-        Ok(())
-    }
 
-    fn populate_payload(payload: &mut Payload, uri: &str, body: &str) -> Result<()> {
-        host_log(LOG_LEVEL_INFO, "Starting populate_payload");
-
-        let method =
-            host_get_method().map_err(|e| anyhow::anyhow!("Failed to get method: {}", e))?;
-        host_log(LOG_LEVEL_INFO, &format!("Method: {}", method));
-
-        let ip = host_get_source_addr()
-            .map_err(|e| anyhow::anyhow!("Failed to get source address: {}", e))?;
-        host_log(LOG_LEVEL_INFO, &format!("Source IP: {}", ip));
-
-        let headers =
-            Self::get_headers().map_err(|e| anyhow::anyhow!("Failed to get headers: {}", e))?;
-        host_log(
-            LOG_LEVEL_INFO,
-            &format!("Number of headers: {}", headers.len()),
-        );
-
-        payload.update_request_info(method, uri.to_string(), ip, headers, body.to_string());
-        host_log(LOG_LEVEL_INFO, "Payload populated successfully");
         Ok(())
     }
 
     fn get_headers() -> Result<std::collections::HashMap<String, String>> {
         host_log(LOG_LEVEL_INFO, "Starting get_headers");
+
         let mut headers = std::collections::HashMap::new();
 
         let header_names_str = host_get_header_names(0)?;
+
         host_log(
             LOG_LEVEL_INFO,
             &format!("Raw header names: {}", header_names_str),
@@ -154,12 +190,15 @@ impl HttpHandler {
 
         for name in header_names {
             let values = host_get_header_values(0, &name)?;
+
             // Remove null characters from the header value
             let cleaned_values = values.trim_end_matches('\0').to_string();
+
             host_log(
                 LOG_LEVEL_INFO,
                 &format!("Header '{}': {}", name, cleaned_values),
             );
+
             headers.insert(name, cleaned_values);
         }
 
@@ -167,6 +206,7 @@ impl HttpHandler {
             LOG_LEVEL_INFO,
             &format!("Total headers processed: {}", headers.len()),
         );
+
         Ok(headers)
     }
 
@@ -182,28 +222,24 @@ impl HttpHandler {
             &format!("Payload JSON length: {}", payload_json.len()),
         );
         host_log(LOG_LEVEL_INFO, &format!("Payload JSON: {}", payload_json));
-
         host_log(
             LOG_LEVEL_INFO,
             &format!("Sending request to Treblle API: {}", config.treblle_api_url),
         );
-        match client.send_to_treblle(
-            &config.treblle_api_url,
-            payload_json.as_bytes(),
-            &config.api_key,
-        ) {
-            Ok(_) => {
-                host_log(LOG_LEVEL_INFO, "Data sent successfully to Treblle API");
-                Ok(())
-            }
-            Err(e) => {
-                host_log(
-                    LOG_LEVEL_ERROR,
-                    &format!("Error sending data to Treblle API: {}", e),
-                );
-                Err(anyhow::anyhow!("Failed to send data to Treblle API: {}", e))
-            }
-        }
+
+        client
+            .send_to_treblle(
+                &config.treblle_api_url,
+                payload_json.as_bytes(),
+                &config.api_key,
+            )
+            .map_err(|e| {
+                TreblleError::Http(format!("Failed to send data to Treblle API: {}", e))
+            })?;
+
+        host_log(LOG_LEVEL_INFO, "Data sent successfully to Treblle API");
+
+        Ok(())
     }
 }
 
@@ -222,6 +258,7 @@ impl Guest for HttpHandler {
             LOG_LEVEL_INFO,
             "Letting Traefik continue processing the request",
         );
+
         1 // Always continue processing the request
     }
 

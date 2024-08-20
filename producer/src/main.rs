@@ -1,7 +1,24 @@
+use rand::Rng;
 use reqwest::Client;
 use serde_json::json;
 use std::env;
 use tokio::time::{interval, Duration};
+
+fn generate_mock_user(id: u32) -> serde_json::Value {
+    let mut rng = rand::thread_rng();
+    json!({
+        "id": id,
+        "name": format!("User {}", id),
+        "email": format!("user{}@example.com", id),
+        "password": format!("password{}", rng.gen::<u32>()),
+        "credit_card": format!("{:04} {:04} {:04} {:04}",
+            rng.gen_range(1000..9999),
+            rng.gen_range(1000..9999),
+            rng.gen_range(1000..9999),
+            rng.gen_range(1000..9999)
+        ),
+    })
+}
 
 async fn send_request(
     client: &Client,
@@ -39,20 +56,22 @@ async fn main() {
     let mut interval = interval(Duration::from_secs(interval_duration));
     let mut request_count = 0;
 
-    let consumer_url =
-        env::var("CONSUMER_URL").unwrap_or_else(|_| "http://traefik/consume".to_string());
+    let base_url = env::var("CONSUMER_URL").unwrap_or_else(|_| "http://traefik".to_string());
 
-    println!(
-        "Producer service started. Sending requests to {}",
-        consumer_url
-    );
+    println!("Producer service started. Sending requests to {}", base_url);
 
     loop {
         interval.tick().await;
         request_count += 1;
 
-        let (content_type, payload) = match request_count % 3 {
+        let (endpoint, content_type, payload) = match request_count % 5 {
             0 => (
+                "/consume",
+                "application/json",
+                generate_mock_user(request_count).to_string(),
+            ),
+            1 => (
+                "/consume",
                 "application/json",
                 json!({
                     "id": request_count,
@@ -61,24 +80,38 @@ async fn main() {
                 })
                 .to_string(),
             ),
-            1 => (
+            2 => (
+                "/consume",
                 "text/plain",
                 format!("Plain text message {}", request_count),
             ),
-            _ => (
+            3 => (
+                "/consume",
                 "application/xml",
                 format!(
                     "<message><id>{}</id><text>Test XML message</text></message>",
                     request_count
                 ),
             ),
+            _ => (
+                "/blacklisted-example",
+                "application/json",
+                json!({
+                    "id": request_count,
+                    "message": "This request should be blacklisted, ignored by Treblle middleware, but still passed to Consumer",
+                })
+                .to_string(),
+            ),
         };
 
-        match send_request(&client, &consumer_url, content_type, &payload, 3).await {
+        let url = format!("{}{}", base_url, endpoint);
+
+        match send_request(&client, &url, content_type, &payload, 3).await {
             Ok(response) => {
                 println!(
-                    "Sent request {} ({}): Status {}",
+                    "Sent request {} to {} ({}): Status {}",
                     request_count,
+                    url,
                     content_type,
                     response.status()
                 );

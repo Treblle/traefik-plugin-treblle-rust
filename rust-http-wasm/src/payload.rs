@@ -1,6 +1,6 @@
 use crate::config::Config;
+use crate::error::Result;
 use crate::schema::*;
-use anyhow::{Error, Result};
 use chrono::Utc;
 use regex::Regex;
 use serde_json::Value;
@@ -13,10 +13,7 @@ pub struct Payload {
 
 impl Payload {
     pub fn new(config: &Config) -> Self {
-        let sensitive_keys_regex = Regex::new(&config.sensitive_keys_regex)
-            .unwrap_or_else(|_| {
-                Regex::new(r"(?i)(password|pwd|secret|password_confirmation|cc|card_number|ccv|ssn|credit_score)").unwrap()
-            });
+        let sensitive_keys_regex = Regex::new(&config.sensitive_keys_regex).unwrap();
 
         Payload {
             data: TrebllePayload {
@@ -79,7 +76,7 @@ impl Payload {
     }
 
     pub fn to_json(&self) -> Result<String> {
-        serde_json::to_string(&self.data).map_err(Error::from)
+        serde_json::to_string(&self.data).map_err(Into::into)
     }
 }
 

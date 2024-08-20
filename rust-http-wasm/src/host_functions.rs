@@ -1,16 +1,17 @@
-use anyhow::{Error, Result};
+use crate::error::{Result, TreblleError};
 use core::str;
 use std::ffi::CString;
 
 use crate::constants::{LOG_LEVEL_ERROR, LOG_LEVEL_INFO};
 
+// External functions from the `http_handler` module exposed by http-wasm-host-go/api/handler
+// https://github.com/http-wasm/http-wasm-host-go/blob/main/api/handler/handler.go
 #[link(wasm_import_module = "http_handler")]
 extern "C" {
     fn log(level: i32, message: *const u8, message_len: u32);
     fn get_config(buf: *mut u8, buf_limit: i32) -> i32;
     fn get_method(buf: *const u8, buf_limit: i32) -> i32;
     fn get_uri(ptr: *const u8, message_len: u32) -> i32;
-    fn get_protocol_version(ptr: *const u8, message_len: u32) -> i32;
     fn get_header_names(header_kind: u32, buf: *const u8, buf_limit: i32) -> i64;
     fn get_header_values(
         header_kind: u32,
@@ -33,10 +34,17 @@ fn read_from_buffer<F: Fn(*const u8, u32) -> i32>(read_fn: F) -> Result<String> 
             LOG_LEVEL_ERROR,
             &format!("Failed to read from buffer: {}", len),
         );
-        Err(Error::msg("Failed to read from buffer"))
+
+        Err(TreblleError::HostFunction(
+            "Failed to read from buffer".to_string(),
+        ))
     } else {
-        let result = str::from_utf8(&read_buf[0..len as usize])?.to_string();
+        let result = str::from_utf8(&read_buf[0..len as usize])
+            .map_err(|e| TreblleError::HostFunction(e.to_string()))?
+            .to_string();
+
         host_log(LOG_LEVEL_INFO, &format!("Read from buffer: {} bytes", len));
+
         Ok(result)
     }
 }
@@ -79,10 +87,12 @@ pub fn host_write_request_body(body: &[u8]) -> Result<()> {
     unsafe {
         write_body(0, body.as_ptr(), body.len() as u32);
     }
+
     host_log(
         LOG_LEVEL_INFO,
         &format!("Wrote {} bytes back to request body", body.len()),
     );
+
     Ok(())
 }
 
@@ -94,10 +104,6 @@ pub fn host_get_uri() -> Result<String> {
     read_from_buffer(|buf, buf_limit| unsafe { get_uri(buf, buf_limit as u32) })
 }
 
-pub fn host_get_protocol_version() -> Result<String> {
-    read_from_buffer(|buf, buf_limit| unsafe { get_protocol_version(buf, buf_limit as u32) })
-}
-
 pub fn host_get_source_addr() -> Result<String> {
     read_from_buffer(|buf, buf_limit| unsafe { get_source_addr(buf, buf_limit as i32) })
 }
@@ -106,6 +112,7 @@ pub fn host_get_header_names(header_kind: u32) -> Result<String> {
     let result = read_from_buffer(|buf, buf_limit| unsafe {
         get_header_names(header_kind, buf, buf_limit as i32) as i32
     });
+
     match result {
         Ok(names) => {
             host_log(LOG_LEVEL_INFO, &format!("Got header names: {}", names));
@@ -127,7 +134,7 @@ pub fn host_get_header_values(header_kind: u32, name: &str) -> Result<String> {
 
     // Create a CString, ignoring null characters
     let c_name = CString::new(sanitized_name)
-        .map_err(|e| Error::msg(format!("Invalid header name: {}", e)))?;
+        .map_err(|e| TreblleError::HostFunction(format!("Invalid header name: {}", e)))?;
 
     let result = read_from_buffer(|buf, buf_limit| unsafe {
         get_header_values(
@@ -138,6 +145,7 @@ pub fn host_get_header_values(header_kind: u32, name: &str) -> Result<String> {
             buf_limit as i32,
         ) as i32
     });
+
     match result {
         Ok(values) => {
             host_log(
