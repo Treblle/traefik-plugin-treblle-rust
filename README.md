@@ -182,15 +182,40 @@ The middleware plugin implements a specific pattern for handling request bodies,
 The relevant code for this process is in the `handle_request` function:
 
 ```rust
-let body = host_read_request_body().unwrap_or_else(|_| "{}".to_string());
+let body = match host_read_request_body() {
+   Ok(body) => {
+         host_log(
+            LOG_LEVEL_INFO,
+            &format!("Successfully read body: {} bytes", body.len()),
+         );
+
+         body
+   }
+   Err(e) => {
+         host_log(
+            LOG_LEVEL_ERROR,
+            &format!("Failed to read request body: {}", e),
+         );
+
+         return Err(TreblleError::HostFunction(format!(
+            "Failed to read request body: {}",
+            e
+         )));
+   }
+};
 
 // ... process the body ...
 
 if let Err(e) = host_write_request_body(body.as_bytes()) {
-    host_log(
-        LOG_LEVEL_ERROR,
-        &format!("Error setting request body back: {}", e),
-    );
+   host_log(
+         LOG_LEVEL_ERROR,
+         &format!("Failed to write request body back: {}", e),
+   );
+
+   return Err(TreblleError::HostFunction(format!(
+         "Failed to write request body back: {}",
+         e
+   )));
 }
 ```
 
