@@ -78,12 +78,13 @@ The project consists of several components:
 
 The project uses a Makefile to manage building and running. Here are the main targets:
 
-- `make all`: Default target. Checks Rust version, builds the plugin, and runs the services.
+- `make all`: (or simply `make`) Default target. Checks Rust version, builds the plugin, and runs the services.
+- `make run`: Runs the Docker Compose services.
+- `make stop`: Stops the Docker Compose services.
 - `make check-rust-version`: Verifies the installed Rust version matches the required version.
 - `make generate-rust-toolchain`: Generates the `rust-toolchain.toml` file.
 - `make build-plugin`: Builds the WASM plugin.
 - `make validate-plugin`: Validates the WASM plugin exports.
-- `make run`: Runs the Docker Compose services.
 - `make build-run`: Builds and runs the Docker Compose services.
 - `make clean`: Cleans up Docker resources and build artifacts.
 - `make restart`: Cleans up and rebuilds everything.
