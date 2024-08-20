@@ -49,7 +49,6 @@ fn read_from_buffer<F: Fn(*const u8, u32) -> i32>(read_fn: F) -> Result<String> 
     }
 }
 
-// Update the host_log function to handle potential errors
 pub fn host_log(level: i32, message: &str) {
     // Remove null characters from the message
     let sanitized_message = message.replace('\0', "");
