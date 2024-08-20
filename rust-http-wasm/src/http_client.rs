@@ -13,7 +13,7 @@ impl HttpClient {
 
     pub fn send_to_treblle(&self, url: &str, payload: &[u8], api_key: &str) -> Result<()> {
         let mut writer = Vec::new();
-        let timeout = Duration::from_secs(HTTP_TIMEOUT_SECONDS); // 10 second timeout
+        let timeout = Duration::from_secs(HTTP_TIMEOUT_SECONDS);
 
         host_log(
             LOG_LEVEL_INFO,
