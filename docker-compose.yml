@@ -8,6 +8,10 @@ services:
       - "--entrypoints.web.address=:80"
       - "--experimental.localPlugins.treblle.moduleName=github.com/momo-gg/rust-http-wasm"
       - "--log.level=DEBUG"
+      - "--accesslog=true"
+      - "--accesslog.filepath=/var/log/traefik/access.log"
+      - "--metrics.prometheus=true"
+      - "--metrics.prometheus.buckets=0.1,0.3,1.2,5.0"
     ports:
       - "80:80"
       - "8080:8080"
@@ -16,6 +20,7 @@ services:
       - ./traefik.yml:/etc/traefik/traefik.yml:ro
       - ./traefik_dynamic.yml:/etc/traefik/traefik_dynamic.yml:ro
       - ./plugins-local:/plugins-local:ro
+      - ./logs:/var/log/traefik
     networks:
       - treblle-network
 
@@ -27,6 +32,7 @@ services:
         - RUST_VERSION=${RUST_VERSION}
     environment:
       - CONSUMER_URL=http://traefik/consume
+      - INTERVAL_DURATION=5
     depends_on:
       - traefik
       - consumer

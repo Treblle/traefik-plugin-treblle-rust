@@ -17,6 +17,25 @@ check_export() {
     fi
 }
 
+check_file_size() {
+    if [ -f "$WASM_MODULE" ]; then
+        file_size=$(stat -f%z "$WASM_MODULE")
+        if [ "$file_size" -ge 1048576 ]; then
+            file_size_mb=$(echo "scale=2; $file_size / 1048576" | bc)
+            printf "${GREEN}[INFO] The WASM module size is %s MB.${NC}\n" "$file_size_mb"
+        else
+            file_size_kb=$(echo "scale=2; $file_size / 1024" | bc)
+            printf "${GREEN}[INFO] The WASM module size is %s KB.${NC}\n" "$file_size_kb"
+        fi
+    else
+        printf "${RED}[ERROR] The WASM module file does not exist.${NC}\n"
+        exit 1
+    fi
+}
+
 # Check if the WASM module exports functions required by Traefik
 check_export 'handle_request'
 check_export 'handle_response'
+
+# Check the size of the generated WASM file
+check_file_size

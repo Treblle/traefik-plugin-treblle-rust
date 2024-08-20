@@ -127,3 +127,6 @@ $RECYCLE.BIN/
 
 # Wasm Tools
 wabt/
+
+# Traefik debugging
+logs/

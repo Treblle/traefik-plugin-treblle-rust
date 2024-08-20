@@ -4,6 +4,8 @@
     edition = "2021"
 
 [dependencies]
-    axum       = "0.6.18"
-    tokio      = { version = "1.28.0", features = ["full"] }
-    serde_json = "1.0.96"
+    axum               = "0.6.18"
+    tokio              = { version = "1.28.0", features = ["full"] }
+    serde_json         = "1.0.96"
+    tracing            = "0.1"
+    tracing-subscriber = "0.3"

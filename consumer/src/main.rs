@@ -1,15 +1,13 @@
 use axum::{
+    http::{HeaderMap, StatusCode},
+    response::IntoResponse,
     routing::post,
     Router,
-    Json,
-    http::StatusCode,
 };
-use serde_json::Value;
 
 #[tokio::main]
 async fn main() {
-    let app = Router::new()
-        .route("/consume", post(consume_request));
+    let app = Router::new().route("/consume", post(consume_request));
 
     let addr = "0.0.0.0:3000";
     println!("Consumer service listening on {}", addr);
@@ -20,9 +18,10 @@ async fn main() {
         .unwrap();
 }
 
-async fn consume_request(
-    Json(payload): Json<Value>,
-) -> (StatusCode, Json<Value>) {
-    println!("Received request: {:?}", payload);
-    (StatusCode::OK, Json(payload))
+async fn consume_request(headers: HeaderMap, body: String) -> impl IntoResponse {
+    println!("Received request:");
+    println!("Headers: {:?}", headers);
+    println!("Body: {}", body);
+
+    (StatusCode::OK, "Request received and logged")
 }

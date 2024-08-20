@@ -4,6 +4,27 @@ http:
             plugin:
                 treblle:
                     treblleApiUrl: "http://treblle-api:3002/api"
+                    apiKey: "your_api_key_here"
+                    projectId: "your_project_id_here"
+                    routeBlacklist: ["/ping", "/healthcheck"]
+                    sensitiveKeysRegex: "(?i)(password|pwd|secret|password_confirmation|cc|card_number|ccv|ssn|credit_score)"
+                    allowedContentType: "application/json"
+
+        rate-limit:
+            rateLimit:
+                average: 100
+                burst: 50
+
+        circuit-breaker:
+            circuitBreaker:
+                expression: "NetworkErrorRatio() > 0.5"
+
+        buffering:
+            buffering:
+                maxRequestBodyBytes: 2097152
+                memRequestBodyBytes: 2097152
+                maxResponseBodyBytes: 2097152
+                memResponseBodyBytes: 2097152
 
     routers:
         consumer:
@@ -11,6 +32,9 @@ http:
             service: consumer-service
             middlewares:
                 - treblle-middleware
+                - rate-limit
+                - circuit-breaker
+                - buffering
 
     services:
         consumer-service:
