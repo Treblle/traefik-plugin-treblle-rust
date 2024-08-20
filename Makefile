@@ -1,7 +1,7 @@
 include .env
 export
 
-.PHONY: all check-rust-version build-plugin validate-plugin build-run run clean
+.PHONY: all check-rust-version build-plugin validate-plugin build-run run stop clean
 
 # Default target
 all: check-rust-version build-plugin run
@@ -40,6 +40,11 @@ validate-plugin:
 run: build-plugin validate-plugin
 	@echo "Starting services with Docker Compose..."
 	docker-compose up -d
+
+# Stop Docker Compose
+stop:
+	@echo "Stopping services with Docker Compose..."
+	docker-compose down
 
 # Run Docker Compose with Build
 build-run: build-plugin validate-plugin
