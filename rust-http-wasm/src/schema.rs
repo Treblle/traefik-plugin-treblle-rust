@@ -1,7 +1,10 @@
+//! Schema definitions for the Treblle payload.
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Serialize, Deserialize, Debug)]
+/// Represents the main payload sent to Treblle API.
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TrebllePayload {
     pub api_key: String,
     pub project_id: String,
@@ -10,7 +13,8 @@ pub struct TrebllePayload {
     pub data: PayloadData,
 }
 
-#[derive(Serialize, Deserialize, Default, Debug)]
+/// Contains the main data of the Treblle payload.
+#[derive(Serialize, Deserialize, Default, Debug, Clone)]
 pub struct PayloadData {
     pub server: ServerInfo,
     pub language: LanguageInfo,
@@ -19,25 +23,31 @@ pub struct PayloadData {
     pub errors: Vec<ErrorInfo>,
 }
 
-#[derive(Serialize, Deserialize, Default, Debug)]
+/// Represents server information.
+#[derive(Serialize, Deserialize, Default, Debug, Clone)]
 pub struct ServerInfo {
     pub ip: String,
     pub timezone: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub software: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub signature: Option<String>,
     pub protocol: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub encoding: Option<String>,
     pub os: OsInfo,
 }
 
-#[derive(Serialize, Deserialize, Default, Debug)]
+/// Represents operating system information.
+#[derive(Serialize, Deserialize, Default, Debug, Clone)]
 pub struct OsInfo {
     pub name: String,
     pub release: String,
     pub architecture: String,
 }
 
-#[derive(Serialize, Deserialize, Default, Debug)]
+/// Represents programming language information.
+#[derive(Serialize, Deserialize, Default, Debug, Clone)]
 pub struct LanguageInfo {
     pub name: String,
     pub version: String,
@@ -47,7 +57,8 @@ pub struct LanguageInfo {
     pub display_errors: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Default, Debug)]
+/// Represents HTTP request information.
+#[derive(Serialize, Deserialize, Default, Debug, Clone)]
 pub struct RequestInfo {
     pub timestamp: String,
     pub ip: String,
@@ -55,10 +66,12 @@ pub struct RequestInfo {
     pub user_agent: String,
     pub method: String,
     pub headers: HashMap<String, String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub body: Option<serde_json::Value>,
 }
 
-#[derive(Serialize, Deserialize, Default, Debug)]
+/// Represents HTTP response information.
+#[derive(Serialize, Deserialize, Default, Debug, Clone)]
 pub struct ResponseInfo {
     #[serde(serialize_with = "serialize_code")]
     pub code: u32,
@@ -66,10 +79,12 @@ pub struct ResponseInfo {
     pub size: usize,
     pub load_time: f64,
     pub headers: HashMap<String, String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub body: Option<serde_json::Value>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+/// Represents error information.
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ErrorInfo {
     pub source: String,
     pub error_type: String,
