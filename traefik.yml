@@ -17,6 +17,9 @@ experimental:
     treblle:
       moduleName: github.com/momo-gg/rust-http-wasm
 
+serversTransport:
+  insecureSkipVerify: true
+
 log:
   level: DEBUG
   filePath: /var/log/traefik/traefik.log

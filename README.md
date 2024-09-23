@@ -6,6 +6,31 @@ A middleware plugin for Traefik that integrates Treblle's API monitoring and log
 
 The plugin collects data from Traefik's request/response lifecycle, masks sensitive information, and sends the sanitized data to Treblle's API for monitoring. This plugin is designed to be lightweight, efficient, and easy to install through the Traefik catalog.
 
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Traefik
+    participant WASM Plugin
+    participant Backend Service
+    participant Treblle API
+
+    Client->>Traefik: HTTP Request
+    Traefik->>Backend Service: Forward Request
+    Backend Service->>WASM Plugin: handle_request()
+    WASM Plugin->>WASM Plugin: Check blacklist & content type
+    alt Route not blacklisted & JSON content
+        WASM Plugin->>WASM Plugin: Extract & mask request data
+        WASM Plugin->>Treblle API: Send request data (async)
+    end
+    WASM Plugin-->>Backend Service: Continue processing
+    Backend Service->>WASM Plugin: handle_response()
+    WASM Plugin->>WASM Plugin: Extract & mask response data
+    WASM Plugin->>Treblle API: Send response data (async)
+    WASM Plugin-->>Backend Service: Finish processing
+    Backend Service-->>Traefik: HTTP Response
+    Traefik-->>Client: Forward Response
+```
+
 ### Features
 
 - **Data Ingestion:** Captures request and response data from Traefik and sends it to Treblle via a POST request in JSON format.
@@ -99,7 +124,7 @@ The Traefik configuration is defined in `traefik.yml` and `traefik_dynamic.yml`.
 
 The plugin configuration is located in `traefik_dynamic.yml` under the `http.middlewares.treblle-middleware.plugin.treblle` section. You can adjust the following settings:
 
-- `treblleApiUrl`: URL of the Treblle API
+- `treblleApiUrls`: List of URLs of the Treblle API to be used in round-robin fashion.
 - `apiKey`: Your Treblle API key
 - `projectId`: Your Treblle project ID
 - `routeBlacklist`: List of routes to exclude from processing (e.g., ["/blacklisted-example"])

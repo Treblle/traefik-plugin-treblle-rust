@@ -1,20 +1,17 @@
 use crate::config::Config;
 use crate::error::Result;
 use crate::schema::*;
-use chrono::Utc;
-use regex::Regex;
-use serde_json::Value;
+use crate::utils;
 use std::collections::HashMap;
+use std::time::Instant;
 
 pub struct Payload {
     pub data: TrebllePayload,
-    sensitive_keys_regex: Regex,
+    config: Config,
 }
 
 impl Payload {
-    pub fn new(config: &Config) -> Self {
-        let sensitive_keys_regex = Regex::new(&config.sensitive_keys_regex).unwrap();
-
+    pub fn new(config: Config) -> Self {
         Payload {
             data: TrebllePayload {
                 api_key: config.api_key.clone(),
@@ -23,7 +20,7 @@ impl Payload {
                 sdk: "rust-wasm".to_string(),
                 data: PayloadData::default(),
             },
-            sensitive_keys_regex,
+            config,
         }
     }
 
@@ -31,55 +28,57 @@ impl Payload {
         &mut self,
         method: String,
         url: String,
-        ip: String,
         headers: HashMap<String, String>,
-        body: String,
+        body: &[u8],
     ) {
-        self.data.data.request.method = method;
-        self.data.data.request.url = url;
-        self.data.data.request.ip = ip;
-        self.data.data.request.headers = headers;
-        self.data.data.request.body = serde_json::from_str(&body).unwrap_or(Value::String(body));
-        self.data.data.request.timestamp = Utc::now().to_rfc3339();
-
-        if let Some(user_agent) = self.data.data.request.headers.get("User-Agent") {
-            self.data.data.request.user_agent = user_agent.clone();
-        }
+        self.data.data.request = utils::parse_request(method, url, headers, body, &self.config);
     }
 
-    pub fn mask_sensitive_data(&mut self) {
-        Self::mask_recursive(&self.sensitive_keys_regex, &mut self.data.data.request.body);
-        Self::mask_recursive(
-            &self.sensitive_keys_regex,
-            &mut self.data.data.response.body,
-        );
+    pub fn update_response_info(
+        &mut self,
+        status: u32,
+        headers: HashMap<String, String>,
+        body: &[u8],
+        start_time: Instant,
+    ) {
+        self.data.data.response =
+            utils::parse_response(status, headers, body, start_time, &self.config);
     }
 
-    fn mask_recursive(regex: &Regex, value: &mut Value) {
-        match value {
-            Value::Object(obj) => {
-                for (key, val) in obj.iter_mut() {
-                    if regex.is_match(key) {
-                        *val = Value::String("*****".to_string());
-                    } else {
-                        Self::mask_recursive(regex, val);
-                    }
-                }
-            }
-            Value::Array(arr) => {
-                for val in arr.iter_mut() {
-                    Self::mask_recursive(regex, val);
-                }
-            }
-            _ => {}
-        }
+    pub fn add_error(&mut self, error: ErrorInfo) {
+        self.data.data.errors.push(error);
     }
 
     pub fn to_json(&self) -> Result<String> {
         serde_json::to_string(&self.data).map_err(Into::into)
     }
+
+    pub fn update_server_info(&mut self, protocol: String) {
+        self.data.data.server = ServerInfo {
+            ip: "Unknown".to_string(), // TODO: Implement server IP detection
+            timezone: chrono::Local::now().format("%Z").to_string(),
+            software: None,
+            signature: None,
+            protocol,
+            encoding: None,
+            os: OsInfo {
+                name: std::env::consts::OS.to_string(),
+                release: "Unknown".to_string(), // TODO: Implement OS release detection
+                architecture: std::env::consts::ARCH.to_string(),
+            },
+        };
+    }
+
+    pub fn update_language_info(&mut self) {
+        self.data.data.language = LanguageInfo {
+            name: "rust".to_string(),
+            version: env!("CARGO_PKG_VERSION").to_string(),
+            expose_php: None,
+            display_errors: None,
+        };
+    }
 }
 
 pub fn is_json(content_type: &str) -> bool {
-    content_type.to_lowercase().contains("application/json")
+    utils::is_json(content_type)
 }

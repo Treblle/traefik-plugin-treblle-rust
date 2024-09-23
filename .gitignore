@@ -132,4 +132,5 @@ wabt/
 logs/
 
 # Misc
+certs/
 TODOs.md
