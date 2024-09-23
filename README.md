@@ -1,6 +1,6 @@
-# Treblle's Traefik (`^v3.1`) Middleware Plugin in Rust and WebAssembly
+# Traefik (`^v3.1`) WASM Middleware Plugin
 
-A middleware plugin for Traefik that integrates Treblle's API monitoring and logging services.
+A middleware plugin for Traefik that integrates Treblle's API monitoring and logging services. Built in Rust and compiled to WebAssembly (WASM) for high performance and compatibility with Traefik v3.1 or newer, using either `wasm-wasi` or `wasm-wasi1p` as the target.
 
 ## Overview
 
@@ -236,8 +236,8 @@ To verify these scenarios, check the logs of the Consumer service and the Trebll
 
 If you encounter any issues:
 
-1. Check the logs of each service using `docker-compose logs [service_name]`.
-1. Ensure all services are running with `docker-compose ps`.
+1. Check the logs of each service using `docker compose logs [service_name]`.
+1. Ensure all services are running with `docker compose ps`.
 1. Verify the Traefik configuration in `traefik.yml` and `traefik_dynamic.yml`.
 1. Check the Rust code in the middleware and Treblle API for any errors.
 1. Run `make check-rust-version` to ensure you're using the correct Rust version.

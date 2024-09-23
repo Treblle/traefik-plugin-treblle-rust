@@ -2,7 +2,7 @@ use crate::constants::{HTTP_TIMEOUT_SECONDS, LOG_LEVEL_ERROR, LOG_LEVEL_INFO};
 use crate::error::{Result, TreblleError};
 use crate::host_functions::host_log;
 use std::time::Duration;
-use wasmedge_http_req::{request, uri::Uri};
+use wasmedge_http_req::{request, response::Response, uri::Uri};
 
 pub struct HttpClient;
 
@@ -11,14 +11,9 @@ impl HttpClient {
         HttpClient
     }
 
-    pub fn send_to_treblle(&self, url: &str, payload: &[u8], api_key: &str) -> Result<()> {
+    pub fn post(&self, url: &str, payload: &[u8], api_key: &str) -> Result<()> {
         let mut writer = Vec::new();
         let timeout = Duration::from_secs(HTTP_TIMEOUT_SECONDS);
-
-        host_log(
-            LOG_LEVEL_INFO,
-            &format!("Preparing request to Treblle API: {}", url),
-        );
 
         let uri =
             Uri::try_from(url).map_err(|e| TreblleError::Http(format!("Invalid URL: {}", e)))?;
@@ -28,11 +23,6 @@ impl HttpClient {
         request.header("Content-Type", "application/json");
         request.header("x-api-key", api_key);
         request.header("Content-Length", &payload.len().to_string());
-
-        host_log(
-            LOG_LEVEL_INFO,
-            &format!("Sending {} bytes to Treblle API", payload.len()),
-        );
 
         host_log(
             LOG_LEVEL_INFO,
@@ -54,7 +44,7 @@ impl HttpClient {
         );
 
         if response.status_code().is_success() {
-            host_log(LOG_LEVEL_INFO, "Successfully sent data to Treblle API");
+            host_log(LOG_LEVEL_INFO, "Successfully sent data");
 
             Ok(())
         } else {
@@ -69,5 +59,37 @@ impl HttpClient {
 
             Err(TreblleError::Http(error_msg))
         }
+    }
+
+    pub fn get(&self, url: &str) -> Result<Response> {
+        let timeout = Duration::from_secs(HTTP_TIMEOUT_SECONDS);
+
+        host_log(
+            LOG_LEVEL_INFO,
+            &format!("Preparing GET request to: {}", url),
+        );
+
+        let uri = Uri::try_from(url).map_err(|e| {
+            host_log(LOG_LEVEL_ERROR, &format!("Failed to parse URL: {}", e));
+            TreblleError::Http(format!("Invalid URL: {}", e))
+        })?;
+
+        let mut request = request::Request::new(&uri);
+
+        let mut writer = Vec::new();
+        let response = request
+            .timeout(Some(timeout))
+            .send(&mut writer)
+            .map_err(|e| {
+                host_log(LOG_LEVEL_ERROR, &format!("Failed to send request: {:?}", e));
+                TreblleError::Http(format!("Failed to send GET request: {:?}", e))
+            })?;
+
+        host_log(
+            LOG_LEVEL_INFO,
+            &format!("Received response: status {}", response.status_code()),
+        );
+
+        Ok(response)
     }
 }

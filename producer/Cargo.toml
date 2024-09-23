@@ -10,3 +10,4 @@
     serde_json = "1.0.96"
     chrono     = "0.4.24"
     rand       = "0.8"
+    axum       = "0.6.18"

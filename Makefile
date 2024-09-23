@@ -27,6 +27,10 @@ check-rust-version:
 generate-rust-toolchain:
 	@./generate-rust-toolchain.sh
 
+# Generate SSL certificates for local testing
+generate-ssl-certs:
+	@./generate-ssl-certs.sh
+
 # Build the WASM plugin
 build-plugin: check-rust-version generate-rust-toolchain
 	@echo "Building WASM plugin..."
@@ -39,22 +43,22 @@ validate-plugin:
 # Run Docker Compose
 run: build-plugin validate-plugin
 	@echo "Starting services with Docker Compose..."
-	docker-compose up -d
+	docker compose up -d
 
 # Stop Docker Compose
 stop:
 	@echo "Stopping services with Docker Compose..."
-	docker-compose down
+	docker compose down
 
 # Run Docker Compose with Build
 build-run: build-plugin validate-plugin
 	@echo "Starting services with Docker Compose..."
-	docker-compose up -d --build
+	docker compose up -d --build
 
 # Clean up
 clean:
 	@echo "Cleaning up..."
-	docker-compose down -v --remove-orphans
+	docker compose down -v --remove-orphans
 	docker system prune -af --volumes
 	rm -rf plugins-local/src
 

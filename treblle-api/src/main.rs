@@ -18,7 +18,7 @@ async fn main() {
 
     let app = Router::new().route("/api", post(receive_data));
 
-    let addr = "0.0.0.0:3002";
+    let addr = "0.0.0.0:3000";
     info!("Treblle API listening on {}", addr);
 
     axum::Server::bind(&addr.parse().unwrap())

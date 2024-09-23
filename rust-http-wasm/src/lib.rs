@@ -228,7 +228,7 @@ impl HttpHandler {
         );
 
         client
-            .send_to_treblle(
+            .post(
                 &config.treblle_api_url,
                 payload_json.as_bytes(),
                 &config.api_key,
@@ -241,6 +241,32 @@ impl HttpHandler {
 
         Ok(())
     }
+
+    fn verify_https_support() -> Result<()> {
+        let client = HttpClient::new();
+        let url = "https://example.com";
+
+        host_log(
+            LOG_LEVEL_INFO,
+            &format!("Verifying HTTPS support by calling: {}", url),
+        );
+
+        let response = client
+            .get(url)
+            .map_err(|e| TreblleError::Http(format!("Failed to send GET request: {}", e)))?;
+
+        if response.status_code().is_success() {
+            host_log(LOG_LEVEL_INFO, "Successfully verified HTTPS support");
+            Ok(())
+        } else {
+            let error_msg = format!(
+                "HTTPS verification failed with status code: {}",
+                response.status_code()
+            );
+            host_log(LOG_LEVEL_ERROR, &error_msg);
+            Err(TreblleError::Http(error_msg))
+        }
+    }
 }
 
 impl Guest for HttpHandler {
@@ -252,6 +278,13 @@ impl Guest for HttpHandler {
 
         if let Err(e) = Self::process_request(&config, &blacklist) {
             host_log(LOG_LEVEL_ERROR, &format!("Error processing request: {}", e));
+        }
+
+        if let Err(e) = Self::verify_https_support() {
+            host_log(
+                LOG_LEVEL_ERROR,
+                &format!("HTTPS verification failed: {}", e),
+            );
         }
 
         host_log(

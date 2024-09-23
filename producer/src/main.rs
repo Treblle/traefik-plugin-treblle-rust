@@ -1,8 +1,13 @@
+use axum::{routing::get, Router};
 use rand::Rng;
 use reqwest::Client;
 use serde_json::json;
 use std::env;
 use tokio::time::{interval, Duration};
+
+async fn healthcheck() -> &'static str {
+    "OK"
+}
 
 fn generate_mock_user(id: u32) -> serde_json::Value {
     let mut rng = rand::thread_rng();
@@ -45,18 +50,9 @@ async fn send_request(
     }
 }
 
-#[tokio::main]
-async fn main() {
-    let client = Client::new();
-    let interval_duration = env::var("INTERVAL_DURATION")
-        .unwrap_or_else(|_| "5".to_string())
-        .parse::<u64>()
-        .expect("INTERVAL_DURATION must be a valid u64");
-
+async fn run_producer(client: Client, base_url: String, interval_duration: u64) {
     let mut interval = interval(Duration::from_secs(interval_duration));
     let mut request_count = 0;
-
-    let base_url = env::var("CONSUMER_URL").unwrap_or_else(|_| "http://traefik".to_string());
 
     println!("Producer service started. Sending requests to {}", base_url);
 
@@ -128,5 +124,36 @@ async fn main() {
                 );
             }
         }
+    }
+}
+
+#[tokio::main]
+async fn main() {
+    let client = Client::builder()
+        .danger_accept_invalid_certs(true)
+        .build()
+        .expect("Failed to create HTTP client");
+
+    let interval_duration = env::var("INTERVAL_DURATION")
+        .unwrap_or_else(|_| "5".to_string())
+        .parse::<u64>()
+        .expect("INTERVAL_DURATION must be a valid u64");
+
+    let base_url = env::var("CONSUMER_URL").unwrap_or_else(|_| "https://consumer".to_string());
+
+    // Create a new Axum router with the healthcheck endpoint
+    let app = Router::new().route("/health", get(healthcheck));
+
+    // Run the Axum server in a separate task
+    let server =
+        axum::Server::bind(&"0.0.0.0:3000".parse().unwrap()).serve(app.into_make_service());
+
+    // Run the producer logic in another task
+    let producer = run_producer(client, base_url, interval_duration);
+
+    // Run both tasks concurrently
+    tokio::select! {
+        _ = server => println!("Server task completed"),
+        _ = producer => println!("Producer task completed"),
     }
 }
