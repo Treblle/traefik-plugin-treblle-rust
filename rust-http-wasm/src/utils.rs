@@ -107,8 +107,7 @@ pub fn parse_json_body(body: &[u8]) -> Value {
 /// Returns a `Result<Value>` containing the masked JSON value,
 /// or an error if the regex pattern is invalid.
 pub fn mask_sensitive_data(data: &Value, sensitive_keys_regex: &str) -> Result<Value> {
-    let re = Regex::new(sensitive_keys_regex)
-        .map_err(|e| TreblleError::Regex(e))?;
+    let re = Regex::new(sensitive_keys_regex).map_err(|e| TreblleError::Regex(e))?;
 
     Ok(match data {
         Value::Object(map) => {
@@ -149,8 +148,7 @@ pub fn mask_sensitive_headers(
     headers: &std::collections::HashMap<String, String>,
     sensitive_keys_regex: &str,
 ) -> Result<std::collections::HashMap<String, String>> {
-    let re = Regex::new(sensitive_keys_regex)
-        .map_err(|e| TreblleError::Regex(e))?;
+    let re = Regex::new(sensitive_keys_regex).map_err(|e| TreblleError::Regex(e))?;
 
     Ok(headers
         .iter()
@@ -174,7 +172,9 @@ pub fn mask_sensitive_headers(
 ///
 /// Returns an `Option<String>` containing the extracted IP address,
 /// or `None` if no IP address is found.
-pub fn extract_ip_from_headers(headers: &std::collections::HashMap<String, String>) -> Option<String> {
+pub fn extract_ip_from_headers(
+    headers: &std::collections::HashMap<String, String>,
+) -> Option<String> {
     headers
         .get("X-Forwarded-For")
         .or_else(|| headers.get("X-Real-IP"))
@@ -214,9 +214,11 @@ mod tests {
             "email": "john@example.com"
         });
         let masked = mask_sensitive_data(&data, r"password|email")?;
+        
         assert_eq!(masked["username"], "john_doe");
         assert_eq!(masked["password"], "*****");
         assert_eq!(masked["email"], "*****");
+        
         Ok(())
     }
 
@@ -230,6 +232,7 @@ mod tests {
 
         assert_eq!(masked["User-Agent"], "TestAgent");
         assert_eq!(masked["Authorization"], "*****");
+        
         Ok(())
     }
 
@@ -237,6 +240,7 @@ mod tests {
     fn test_invalid_regex() {
         let data = serde_json::json!({"key": "value"});
         let result = mask_sensitive_data(&data, r"[invalid regex");
+        
         assert!(result.is_err());
     }
 }

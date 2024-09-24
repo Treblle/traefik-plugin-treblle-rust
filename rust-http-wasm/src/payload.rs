@@ -6,10 +6,10 @@
 use std::collections::HashMap;
 use std::time::Instant;
 
-use crate::CONFIG;
 use crate::error::Result;
 use crate::schema::*;
 use crate::utils;
+use crate::CONFIG;
 
 /// Represents the payload that will be sent to the Treblle API.
 pub struct Payload {
@@ -38,7 +38,8 @@ impl Payload {
         headers: HashMap<String, String>,
         body: &[u8],
     ) {
-        self.data.data.request = utils::parse_request(method, url, headers, body, &CONFIG).expect("Error parsing request");
+        self.data.data.request = utils::parse_request(method, url, headers, body, &CONFIG)
+            .expect("Error parsing request");
     }
 
     /// Updates the response information in the payload.
@@ -49,8 +50,8 @@ impl Payload {
         body: &[u8],
         start_time: Instant,
     ) {
-        self.data.data.response =
-            utils::parse_response(status, headers, body, start_time, &CONFIG).expect("Error parsing response");
+        self.data.data.response = utils::parse_response(status, headers, body, start_time, &CONFIG)
+            .expect("Error parsing response");
     }
 
     /// Adds an error to the payload.
@@ -64,6 +65,10 @@ impl Payload {
     }
 
     /// Updates the server information in the payload.
+    /// Although this function exists here for proper & complete schema validated response,
+    /// it's not going to see much use within WASM environment. 
+    /// 
+    /// This part of payload schema is intended for SDK/middleware use.
     pub fn update_server_info(&mut self, protocol: String) {
         self.data.data.server = ServerInfo {
             ip: "Unknown".to_string(), // TODO: Implement server IP detection
@@ -111,7 +116,7 @@ mod tests {
             route_blacklist: vec![],
             sensitive_keys_regex: DEFAULT_SENSITIVE_KEYS_REGEX.to_string(),
             buffer_response: false,
-            log_level: LogLevel::None
+            log_level: LogLevel::None,
         }
     }
 

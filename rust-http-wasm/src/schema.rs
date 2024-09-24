@@ -87,6 +87,7 @@ pub struct ResponseInfo {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ErrorInfo {
     pub source: String,
+    #[serde(rename(serialize = "type"))] // Because 'type' is reserved keyword
     pub error_type: String,
     pub message: String,
     pub file: String,

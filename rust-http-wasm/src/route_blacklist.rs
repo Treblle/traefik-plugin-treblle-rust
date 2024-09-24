@@ -48,10 +48,8 @@ mod tests {
 
     #[test]
     fn test_route_blacklist() {
-        let blacklist = RouteBlacklist::new(&[
-            r"^/api/internal/.*$".to_string(),
-            r"^/health$".to_string(),
-        ]);
+        let blacklist =
+            RouteBlacklist::new(&[r"^/api/internal/.*$".to_string(), r"^/health$".to_string()]);
 
         assert!(blacklist.is_blacklisted("/api/internal/users"));
         assert!(blacklist.is_blacklisted("/health"));

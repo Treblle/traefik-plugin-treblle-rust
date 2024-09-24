@@ -1,4 +1,5 @@
 //! Error types for the Treblle middleware.
+
 use thiserror::Error;
 
 #[cfg(not(feature = "wasm"))]
@@ -37,12 +38,13 @@ pub type Result<T> = std::result::Result<T, TreblleError>;
 
 #[cfg(test)]
 mod tests {
-    use serde::de::Error;
     use super::*;
+    use serde::de::Error;
 
     #[test]
     fn test_error_display() {
         let error = TreblleError::Http("Not Found".to_string());
+
         assert_eq!(format!("{}", error), "HTTP error: Not Found");
     }
 
@@ -50,6 +52,7 @@ mod tests {
     fn test_error_conversion() {
         let json_error = serde_json::Error::custom("JSON Error");
         let treblle_error: TreblleError = json_error.into();
+
         assert!(matches!(treblle_error, TreblleError::Json(_)));
     }
 }

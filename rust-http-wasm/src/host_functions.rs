@@ -23,7 +23,13 @@ extern "C" {
     fn get_uri(ptr: *mut u8, buf_limit: u32) -> i32;
     fn get_protocol_version(buf: *mut u8, buf_limit: i32) -> i32;
     fn get_header_names(header_kind: u32, buf: *mut u8, buf_limit: i32) -> i64;
-    fn get_header_values(header_kind: u32, name_ptr: *const u8, name_len: u32, buf: *mut u8, buf_limit: i32) -> i64;
+    fn get_header_values(
+        header_kind: u32,
+        name_ptr: *const u8,
+        name_len: u32,
+        buf: *mut u8,
+        buf_limit: i32,
+    ) -> i64;
     fn read_body(body_kind: u32, ptr: *mut u8, buf_limit: u32) -> i64;
     fn get_status_code() -> u32;
 }
@@ -37,9 +43,14 @@ extern "C" {
 #[cfg(feature = "wasm")]
 pub fn host_log(level: i32, message: &str) {
     let sanitized_message = message.replace('\0', "");
+    
     if let Ok(c_message) = CString::new(sanitized_message) {
         unsafe {
-            log(level, c_message.as_ptr() as *const u8, c_message.as_bytes().len() as u32);
+            log(
+                level,
+                c_message.as_ptr() as *const u8,
+                c_message.as_bytes().len() as u32,
+            );
         }
     }
 }
@@ -152,14 +163,15 @@ pub fn host_get_header_values(header_kind: u32, name: &str) -> Result<String> {
 /// Returns the body as a vector of bytes, or an error if reading fails.
 #[cfg(feature = "wasm")]
 pub fn host_read_body(body_kind: u32) -> Result<Vec<u8>> {
-
     let mut buffer = Vec::with_capacity(4096);
     let read = unsafe { read_body(body_kind, buffer.as_mut_ptr(), 4096) };
 
     if read < 0 {
         Err(TreblleError::HostFunction("Error reading body".to_string()))
     } else {
-        unsafe { buffer.set_len(read as usize); }
+        unsafe {
+            buffer.set_len(read as usize);
+        }
         Ok(buffer)
     }
 }
@@ -189,7 +201,9 @@ fn read_from_buffer<F: Fn(*mut u8, i32) -> i32>(read_fn: F) -> Result<String> {
     let len = read_fn(buffer.as_mut_ptr(), buffer.len() as i32);
 
     if len < 0 {
-        Err(TreblleError::HostFunction("Failed to read from buffer".to_string()))
+        Err(TreblleError::HostFunction(
+            "Failed to read from buffer".to_string(),
+        ))
     } else {
         buffer.truncate(len as usize);
         String::from_utf8(buffer).map_err(|e| TreblleError::HostFunction(e.to_string()))

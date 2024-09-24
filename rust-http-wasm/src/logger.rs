@@ -4,7 +4,10 @@
 //! It uses the `log` crate for non-WASM environments and falls back to `host_log` for WASM environments.
 
 use serde::Deserialize;
-use crate::constants::{LOG_LEVEL_DEBUG, LOG_LEVEL_ERROR, LOG_LEVEL_INFO, LOG_LEVEL_NONE, LOG_LEVEL_WARN};
+
+use crate::constants::{
+    LOG_LEVEL_DEBUG, LOG_LEVEL_ERROR, LOG_LEVEL_INFO, LOG_LEVEL_NONE, LOG_LEVEL_WARN,
+};
 use crate::CONFIG;
 
 #[cfg(feature = "wasm")]

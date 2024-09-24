@@ -6,6 +6,10 @@ pub const LOG_LEVEL_WARN: i32 = 1;
 pub const LOG_LEVEL_ERROR: i32 = 2;
 pub const LOG_LEVEL_NONE: i32 = 3;
 
+pub const HEADER_CONTENT_TYPE: &str = "Content-Type";
+pub const REQUEST_KIND: u32 = 0;
+pub const RESPONSE_KIND: u32 = 1;
+
 pub const DEFAULT_TREBLLE_API_URLS: [&str; 3] = [
     "https://rocknrolla.treblle.com",
     "https://punisher.treblle.com",

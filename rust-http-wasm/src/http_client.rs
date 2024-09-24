@@ -70,7 +70,9 @@ impl HttpClient {
             }
         }
 
-        Err(TreblleError::Http("POST request timed out after all attempts".to_string()))
+        Err(TreblleError::Http(
+            "POST request timed out after all attempts".to_string(),
+        ))
     }
 
     #[cfg(not(feature = "wasm"))]
@@ -87,7 +89,10 @@ impl HttpClient {
         if response.status().is_success() {
             Ok(())
         } else {
-            Err(TreblleError::Http(format!("HTTP error: {}", response.status())))
+            Err(TreblleError::Http(format!(
+                "HTTP error: {}",
+                response.status()
+            )))
         }
     }
 
@@ -104,11 +109,18 @@ impl HttpClient {
     ///
     /// Returns `Ok(())` if the request was successful, or an error otherwise.
     #[cfg(feature = "wasm")]
-    fn attempt_post(&self, url: &str, payload: &[u8], api_key: &str, timeout: Duration) -> Result<()> {
+    fn attempt_post(
+        &self,
+        url: &str,
+        payload: &[u8],
+        api_key: &str,
+        timeout: Duration,
+    ) -> Result<()> {
         let mut writer = Vec::new();
 
-        let uri = Uri::try_from(url)
-            .map_err(|e| TreblleError::Http(format!("Invalid URL: {}", e)))?;
+        let uri =
+            Uri::try_from(url).map_err(|e| TreblleError::Http(format!("Invalid URL: {}", e)))?;
+        
         let mut request = request::Request::new(&uri);
 
         request.method(request::Method::POST);
@@ -156,6 +168,7 @@ mod tests {
     #[test]
     fn test_get_next_url() {
         let client = HttpClient::new(vec!["url1".to_string(), "url2".to_string()]);
+
         assert_eq!(client.get_next_url(), "url1");
         assert_eq!(client.get_next_url(), "url2");
         assert_eq!(client.get_next_url(), "url1");
@@ -163,8 +176,12 @@ mod tests {
 
     #[test]
     fn test_http_client_creation() {
-        let urls = vec!["https://api1.treblle.com".to_string(), "https://api2.treblle.com".to_string()];
+        let urls = vec![
+            "https://api1.treblle.com".to_string(),
+            "https://api2.treblle.com".to_string(),
+        ];
         let client = HttpClient::new(urls.clone());
+
         assert_eq!(client.urls, urls);
         assert_eq!(client.current_index.load(Ordering::SeqCst), 0);
     }
