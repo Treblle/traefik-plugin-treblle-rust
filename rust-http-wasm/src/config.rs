@@ -4,12 +4,14 @@
 
 use serde::Deserialize;
 use serde_json::Value;
+use crate::logger::{log, LogLevel};
 
-use crate::constants::{DEFAULT_SENSITIVE_KEYS_REGEX, DEFAULT_TREBLLE_API_URLS, LOG_LEVEL_ERROR, LOG_LEVEL_INFO};
+use crate::constants::{DEFAULT_SENSITIVE_KEYS_REGEX, DEFAULT_TREBLLE_API_URLS};
+
 use crate::error::{Result, TreblleError};
 
 #[cfg(feature = "wasm")]
-use crate::host_functions::{host_get_config, host_log};
+use crate::host_functions::{host_get_config};
 
 /// Represents the configuration for the Treblle middleware.
 #[derive(Deserialize, Clone, Debug)]
@@ -20,20 +22,39 @@ pub struct Config {
     pub route_blacklist: Vec<String>,
     pub sensitive_keys_regex: String,
     pub buffer_response: bool,
+    pub log_level: LogLevel,
 }
 
 impl Config {
     /// Attempts to get the configuration, falling back to default values if unsuccessful.
     #[cfg(feature = "wasm")]
     pub fn get_or_fallback() -> Self {
-        Self::get().unwrap_or_else(|e| {
-            host_log(
-                LOG_LEVEL_ERROR,
-                &format!("Failed to parse config: {}, using fallback", e),
-            );
-            Self::fallback()
-        })
+        match Self::get() {
+            Ok(config) => {
+                if let Err(e) = config.validate() {
+                    log(LogLevel::Error, &format!("Invalid configuration: {}", e));
+                    Self::fallback()
+                } else {
+                    config
+                }
+            }
+            Err(e) => {
+                log(
+                    LogLevel::Error,
+                    &format!("Failed to parse config: {}, using fallback", e),
+                );
+
+                let fallback = Self::fallback();
+
+                if let Err(e) = fallback.validate() {
+                    log(LogLevel::Error, &format!("Fallback configuration is invalid: {}", e));
+                }
+
+                fallback
+            }
+        }
     }
+
 
     /// Retrieves the configuration from the host environment.
     #[cfg(feature = "wasm")]
@@ -41,9 +62,9 @@ impl Config {
         let raw_config = host_get_config()?;
         let value: Value = serde_json::from_str(&raw_config)
             .map_err(|e| TreblleError::Json(e))?;
-        
-        host_log(
-            LOG_LEVEL_INFO,
+
+        log(
+            LogLevel::Debug,
             &format!("Received config from host: {}", value),
         );
 
@@ -54,12 +75,12 @@ impl Config {
     pub fn get_or_fallback() -> Self {
         Self::fallback()
     }
-    
+
     #[cfg(not(feature = "wasm"))]
     fn get() -> Result<Self> {
         Ok(Self::fallback())
     }
-    
+
     /// Constructs a Config instance from a serde_json::Value.
     fn from_value(value: Value) -> Self {
         Config {
@@ -99,6 +120,12 @@ impl Config {
                     })
                 })
                 .unwrap_or(false),
+
+            log_level: value
+                .get("logLevel")
+                .and_then(|v| v.as_str())
+                .map(LogLevel::from_str)
+                .unwrap_or_default(),
         }
     }
 
@@ -111,7 +138,19 @@ impl Config {
             route_blacklist: Vec::new(),
             sensitive_keys_regex: DEFAULT_SENSITIVE_KEYS_REGEX.to_string(),
             buffer_response: false,
+            log_level: LogLevel::None
         }
+    }
+
+    /// Validates host-injected configuration
+    pub fn validate(&self) -> Result<()> {
+        if self.api_key.is_empty() {
+            return Err(TreblleError::Config("API key is required".to_string()));
+        }
+        if self.project_id.is_empty() {
+            return Err(TreblleError::Config("Project ID is required".to_string()));
+        }
+        Ok(())
     }
 }
 
@@ -128,7 +167,8 @@ mod tests {
             "projectId": "test_project_id",
             "routeBlacklist": ["/health", "/metrics"],
             "sensitiveKeysRegex": "password|secret",
-            "bufferResponse": true
+            "bufferResponse": true,
+            "logLevel": "warn"
         });
 
         let config = Config::from_value(value);
@@ -139,6 +179,8 @@ mod tests {
         assert_eq!(config.route_blacklist, vec!["/health", "/metrics"]);
         assert_eq!(config.sensitive_keys_regex, "password|secret");
         assert!(config.buffer_response);
+        assert!(matches!(config.log_level, LogLevel::Warn));
+
     }
 
     #[test]
@@ -151,5 +193,65 @@ mod tests {
         assert!(config.route_blacklist.is_empty());
         assert_eq!(config.sensitive_keys_regex, DEFAULT_SENSITIVE_KEYS_REGEX);
         assert!(!config.buffer_response);
+        assert!(matches!(config.log_level, LogLevel::None));
+    }
+
+    #[test]
+    fn test_config_validation() {
+        let valid_config = Config {
+            treblle_api_urls: vec![],
+            api_key: "valid_key".to_string(),
+            project_id: "valid_id".to_string(),
+            route_blacklist: vec![],
+            sensitive_keys_regex: "".to_string(),
+            buffer_response: false,
+            log_level: Default::default(),
+        };
+
+        assert!(valid_config.validate().is_ok());
+
+        let invalid_config = Config {
+            treblle_api_urls: vec![],
+            api_key: "".to_string(),
+            project_id: "".to_string(),
+            route_blacklist: vec![],
+            sensitive_keys_regex: "".to_string(),
+            buffer_response: false,
+            log_level: Default::default(),
+        };
+
+        assert!(invalid_config.validate().is_err());
+    }
+
+    #[test]
+    fn test_log_level_parsing() {
+        let test_cases = vec![
+            ("debug", LogLevel::Debug),
+            ("info", LogLevel::Info),
+            ("warn", LogLevel::Warn),
+            ("error", LogLevel::Error),
+            ("none", LogLevel::None),
+            ("invalid", LogLevel::None), // Should default to None
+        ];
+
+        for (input, _expected) in test_cases {
+            let value = json!({ "logLevel": input });
+            let config = Config::from_value(value);
+            assert!(matches!(config.log_level, _expected), "Failed for input: {}", input);
+        }
+    }
+
+    #[test]
+    fn test_log_level_case_insensitivity() {
+        let value = json!({ "logLevel": "WARNING" });
+        let config = Config::from_value(value);
+        assert!(matches!(config.log_level, LogLevel::Warn));
+    }
+
+    #[test]
+    fn test_log_level_default() {
+        let value = json!({});
+        let config = Config::from_value(value);
+        assert!(matches!(config.log_level, LogLevel::None));
     }
 }

@@ -6,12 +6,13 @@
 use core::str;
 use std::ffi::CString;
 
-use crate::constants::{LOG_LEVEL_ERROR, LOG_LEVEL_INFO};
 use crate::error::{Result, TreblleError};
 
 // Defines the external functions provided by the host environment.
 // External functions come from the `http_handler` module exposed by `http-wasm-host-go/api/handler`
-// https://github.com/http-wasm/http-wasm-host-go/blob/main/api/handler/handler.go
+// - https://github.com/http-wasm/http-wasm-host-go/blob/main/api/handler/handler.go
+// - https://github.com/http-wasm/http-wasm-host-go/blob/main/api/handler/wasm.go
+// - https://github.com/http-wasm/http-wasm/blob/main/content/http-handler-abi.md
 #[cfg(feature = "wasm")]
 #[link(wasm_import_module = "http_handler")]
 extern "C" {
@@ -151,20 +152,16 @@ pub fn host_get_header_values(header_kind: u32, name: &str) -> Result<String> {
 /// Returns the body as a vector of bytes, or an error if reading fails.
 #[cfg(feature = "wasm")]
 pub fn host_read_body(body_kind: u32) -> Result<Vec<u8>> {
-    host_log(LOG_LEVEL_INFO, "Starting to read body");
 
     let mut buffer = Vec::with_capacity(4096);
     let read = unsafe { read_body(body_kind, buffer.as_mut_ptr(), 4096) };
 
     if read < 0 {
-        host_log(LOG_LEVEL_ERROR, &format!("Error reading body: {}", read));
-        return Err(TreblleError::HostFunction("Error reading body".to_string()));
+        Err(TreblleError::HostFunction("Error reading body".to_string()))
+    } else {
+        unsafe { buffer.set_len(read as usize); }
+        Ok(buffer)
     }
-
-    unsafe { buffer.set_len(read as usize); }
-
-    host_log(LOG_LEVEL_INFO, &format!("Successfully read {} bytes from body", read));
-    Ok(buffer)
 }
 
 /// Retrieves the status code of the current response.
@@ -190,6 +187,7 @@ pub fn host_get_status_code() -> u32 {
 fn read_from_buffer<F: Fn(*mut u8, i32) -> i32>(read_fn: F) -> Result<String> {
     let mut buffer = vec![0u8; 4096];
     let len = read_fn(buffer.as_mut_ptr(), buffer.len() as i32);
+
     if len < 0 {
         Err(TreblleError::HostFunction("Failed to read from buffer".to_string()))
     } else {

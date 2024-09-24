@@ -23,6 +23,10 @@ pub enum TreblleError {
     #[error("Host function error: {0}")]
     HostFunction(String),
 
+    /// Represents configuration-related errors.
+    #[error("Configuration error: {0}")]
+    Config(String),
+
     #[cfg(not(feature = "wasm"))]
     #[error("Reqwest error: {0}")]
     Reqwest(#[from] Error),

@@ -101,6 +101,7 @@ mod tests {
     use super::*;
     use crate::config::Config;
     use crate::constants::DEFAULT_SENSITIVE_KEYS_REGEX;
+    use crate::logger::LogLevel;
 
     fn create_test_config() -> Config {
         Config {
@@ -110,6 +111,7 @@ mod tests {
             route_blacklist: vec![],
             sensitive_keys_regex: DEFAULT_SENSITIVE_KEYS_REGEX.to_string(),
             buffer_response: false,
+            log_level: LogLevel::None
         }
     }
 

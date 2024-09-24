@@ -13,8 +13,8 @@ mod host_functions;
 
 mod config;
 mod constants;
+mod logger;
 mod error;
-
 mod http_client;
 mod payload;
 mod route_blacklist;
@@ -30,7 +30,7 @@ use bindings::exports::traefik::http_handler::handler::Guest;
 use host_functions::*;
 
 use config::Config;
-use constants::{LOG_LEVEL_ERROR, LOG_LEVEL_INFO};
+use logger::{log, LogLevel};
 use error::{Result, TreblleError};
 use http_client::HttpClient;
 use payload::Payload;
@@ -38,7 +38,8 @@ use route_blacklist::RouteBlacklist;
 use schema::ErrorInfo;
 use std::time::Instant;
 
-// Use Lazy static initialization for global state
+// Use Lazy static initialization for global state, as Traefik doesn't restart our WASM plugin,
+// we don't have to parse config & initialize HttpClient on every single request or response.
 static CONFIG: Lazy<Config> = Lazy::new(Config::get_or_fallback);
 static BLACKLIST: Lazy<RouteBlacklist> = Lazy::new(|| RouteBlacklist::new(&CONFIG.route_blacklist));
 
@@ -50,95 +51,121 @@ struct HttpHandler;
 
 impl HttpHandler {
     /// Process an incoming HTTP request
+    ///
+    /// This function handles the incoming HTTP request, checks if it should be processed,
+    /// and sends the relevant data to the Treblle API if necessary.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if the request was processed successfully, or an error if something went wrong.
     #[cfg(feature = "wasm")]
     fn process_request(&self) -> Result<()> {
         let start_time = Instant::now();
-        
-        host_log(LOG_LEVEL_INFO, "Starting process_request");
+        log(LogLevel::Info, "Processing request...");
 
-        let uri = host_get_uri()?;
-        
-        host_log(LOG_LEVEL_INFO, &format!("Processing request for URI: {}", uri));
+        let uri = host_get_uri().map_err(|e| {
+            log(LogLevel::Error, &format!("Failed to get URI: {}", e));
+            TreblleError::HostFunction(e.to_string())
+        })?;
+
+        log(LogLevel::Debug, &format!("Processing request for URI: {}", uri));
 
         if BLACKLIST.is_blacklisted(&uri) {
-            host_log(LOG_LEVEL_INFO, "URL is blacklisted, skipping Treblle API processing");
-            
+            log(LogLevel::Info, "URL is blacklisted, skipping Treblle API");
             return Ok(());
         }
 
-        let content_type = host_get_header_values(0, "Content-Type")
-            .map_err(|e| {
-                host_log(LOG_LEVEL_ERROR, &format!("Failed to get Content-Type: {}", e));
-                TreblleError::HostFunction(e.to_string())
-            })?;
-        
-        host_log(LOG_LEVEL_INFO, &format!("Content-Type: {:?}", content_type));
+        let content_type = host_get_header_values(0, "Content-Type").map_err(|e| {
+            log(LogLevel::Error, &format!("Failed to get Content-Type: {}", e));
+            TreblleError::HostFunction(e.to_string())
+        })?;
+
+        log(LogLevel::Debug, &format!("Content-Type: {:?}", content_type));
 
         if !payload::is_json(&content_type) {
-            host_log(LOG_LEVEL_INFO, "Non-JSON request, skipping Treblle API");
-            
+            log(LogLevel::Info, "Non-JSON request, skipping Treblle API");
             return Ok(());
         }
 
-        let method = host_get_method()?;
+        let method = host_get_method().map_err(|e| {
+            log(LogLevel::Error, &format!("Failed to get HTTP method: {}", e));
+            TreblleError::HostFunction(e.to_string())
+        })?;
 
         let headers = self.get_headers(0).map_err(|e| {
-            host_log(LOG_LEVEL_ERROR, &format!("Failed to get request headers: {}", e));
+            log(LogLevel::Error, &format!("Failed to get request headers: {}", e));
             TreblleError::HostFunction(e.to_string())
         })?;
 
-        host_log(LOG_LEVEL_INFO, "Starting to read request body");
+        log(LogLevel::Debug, "Starting to read request body");
 
         let body = self.read_body(1).map_err(|e| {
-            host_log(LOG_LEVEL_ERROR, &format!("Failed to read request body: {}", e));
+            log(LogLevel::Error, &format!("Failed to read request body: {}", e));
             TreblleError::HostFunction(e.to_string())
         })?;
 
-        host_log(LOG_LEVEL_INFO, "Creating Payload");
-        
+        log(LogLevel::Debug, "Creating Payload");
+
         let mut payload = Payload::new();
 
-        host_log(LOG_LEVEL_INFO, "Updating request info in payload");
+        log(LogLevel::Debug, "Updating request info in payload");
         payload.update_request_info(method, uri, headers, &body);
-        payload.update_server_info(host_get_protocol_version()?);
+        payload.update_server_info(host_get_protocol_version().map_err(|e| {
+            log(LogLevel::Error, &format!("Failed to get protocol version: {}", e));
+            TreblleError::HostFunction(e.to_string())
+        })?);
         payload.update_language_info();
 
         self.send_to_treblle(&payload, start_time)?;
 
-        host_log(LOG_LEVEL_INFO, "Request processing completed successfully");
+        log(LogLevel::Info, "Request processing completed successfully");
 
         Ok(())
     }
 
     /// Process an HTTP response
+    ///
+    /// This function handles the HTTP response, checks if it should be processed,
+    /// and sends the relevant data to the Treblle API if necessary.
+    ///
+    /// # Arguments
+    ///
+    /// * `_req_ctx` - The request context (unused)
+    /// * `is_error` - Indicates if the response is an error
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if the response was processed successfully, or an error if something went wrong.
     #[cfg(feature = "wasm")]
     fn process_response(&self, _req_ctx: i32, is_error: i32) -> Result<()> {
         if !CONFIG.buffer_response {
-            host_log(LOG_LEVEL_INFO, "Not processing response, buffer_response is not enabled");
-            
+            log(LogLevel::Info, "Not processing response, buffer_response is not enabled");
             return Ok(());
         }
 
         let start_time = Instant::now();
-        
-        host_log(LOG_LEVEL_INFO, "Starting process_response");
+
+        log(LogLevel::Info, "Processing response...");
 
         let mut payload = Payload::new();
 
         let headers = self.get_headers(1).map_err(|e| {
-            host_log(LOG_LEVEL_ERROR, &format!("Failed to get response headers: {}", e));
+            log(LogLevel::Error, &format!("Failed to get response headers: {}", e));
             TreblleError::HostFunction(e.to_string())
         })?;
 
         let body = self.read_body(0).map_err(|e| {
-            host_log(LOG_LEVEL_ERROR, &format!("Failed to read response body: {}", e));
+            log(LogLevel::Error, &format!("Failed to read response body: {}", e));
             TreblleError::HostFunction(e.to_string())
         })?;
-        
+
         let status_code = host_get_status_code();
 
         payload.update_response_info(status_code, headers, &body, start_time);
-        payload.update_server_info(host_get_protocol_version()?);
+        payload.update_server_info(host_get_protocol_version().map_err(|e| {
+            log(LogLevel::Error, &format!("Failed to get protocol version: {}", e));
+            TreblleError::HostFunction(e.to_string())
+        })?);
         payload.update_language_info();
 
         if is_error != 0 || status_code >= 400 {
@@ -154,18 +181,31 @@ impl HttpHandler {
 
         self.send_to_treblle(&payload, start_time)?;
 
-        host_log(LOG_LEVEL_INFO, "Response processing completed successfully");
+        log(LogLevel::Info, "Response processing completed successfully");
 
         Ok(())
     }
 
     /// Get HTTP headers
+    ///
+    /// Retrieves the HTTP headers for either the request or response.
+    ///
+    /// # Arguments
+    ///
+    /// * `header_kind` - Specifies whether to get request (0) or response (1) headers
+    ///
+    /// # Returns
+    ///
+    /// Returns a `Result` containing a `HashMap` of header names and values, or an error if retrieval fails.
     #[cfg(feature = "wasm")]
     fn get_headers(&self, header_kind: u32) -> Result<std::collections::HashMap<String, String>> {
-        host_log(LOG_LEVEL_INFO, "Starting get_headers");
+        log(LogLevel::Info, "Starting get_headers");
 
         let mut headers = std::collections::HashMap::new();
-        let header_names = host_get_header_names(header_kind)?;
+        let header_names = host_get_header_names(header_kind).map_err(|e| {
+            log(LogLevel::Error, &format!("Failed to get header names: {}", e));
+            TreblleError::HostFunction(e.to_string())
+        })?;
 
         for name in header_names.split(',').filter(|s| !s.is_empty()) {
             if let Ok(values) = host_get_header_values(header_kind, name) {
@@ -173,38 +213,60 @@ impl HttpHandler {
             }
         }
 
-        host_log(LOG_LEVEL_INFO, &format!("Total headers processed: {}", headers.len()));
+        log(LogLevel::Info, &format!("Total headers processed: {}", headers.len()));
 
         Ok(headers)
     }
 
     /// Read the HTTP body
+    ///
+    /// Reads either the request or response body.
+    ///
+    /// # Arguments
+    ///
+    /// * `body_kind` - Specifies whether to read the request (0) or response (1) body
+    ///
+    /// # Returns
+    ///
+    /// Returns a `Result` containing the body as a vector of bytes, or an error if reading fails.
     #[cfg(feature = "wasm")]
     fn read_body(&self, body_kind: u32) -> Result<Vec<u8>> {
-        match host_read_body(body_kind) {
-            Ok(body) => {
-                Ok(body)
-            }
-            Err(e) => {
-                Err(e)
-            }
-        }
+        host_read_body(body_kind).map_err(|e| {
+            log(LogLevel::Error, &format!("Failed to read body: {}", e));
+            TreblleError::HostFunction(e.to_string())
+        })
     }
 
     /// Send data to Treblle API
+    ///
+    /// Sends the processed payload to the Treblle API.
+    ///
+    /// # Arguments
+    ///
+    /// * `payload` - The payload to send to Treblle API
+    /// * `start_time` - The time when processing started
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if the data was sent successfully, or an error if sending fails.
+    #[cfg(feature = "wasm")]
     #[cfg(feature = "wasm")]
     fn send_to_treblle(&self, payload: &Payload, start_time: Instant) -> Result<()> {
-        host_log(LOG_LEVEL_INFO, "Preparing to send data to Treblle API");
+        log(LogLevel::Info, "Preparing to send data to Treblle API");
 
         let payload_json = payload.to_json()?;
-        host_log(LOG_LEVEL_INFO, &format!("Payload JSON length: {}", payload_json.len()));
+
+        log(LogLevel::Info, &format!("Payload JSON length: {}", payload_json.len()));
 
         HTTP_CLIENT
             .post(payload_json.as_bytes(), &CONFIG.api_key)
-            .map_err(|e| TreblleError::Http(format!("Failed to send data to Treblle API: {}", e)))?;
+            .map_err(|e| {
+                log(LogLevel::Error, &format!("Failed to send data to Treblle API: {}", e));
+                TreblleError::Http(format!("Failed to send data to Treblle API: {}", e))
+            })?;
 
-        host_log(
-            LOG_LEVEL_INFO,
+        log(
+            LogLevel::Info,
             &format!(
                 "Data sent successfully to Treblle API in {} ms",
                 start_time.elapsed().as_millis()
@@ -217,37 +279,54 @@ impl HttpHandler {
 
 #[cfg(feature = "wasm")]
 impl Guest for HttpHandler {
+    /// Handle an incoming HTTP request
+    ///
+    /// This function is called by the Traefik middleware to process an incoming HTTP request.
+    ///
+    /// # Returns
+    ///
+    /// Returns 1 to indicate that Traefik should continue processing the request.
     fn handle_request() -> i64 {
-        host_log(LOG_LEVEL_INFO, "Handling request in WASM module");
+        logger::init();
+        log(LogLevel::Info, "Handling request in WASM module");
 
         let handler = HttpHandler;
 
-        host_log(LOG_LEVEL_INFO, &format!("Buffer response is set to: {}", CONFIG.buffer_response));
+        log(LogLevel::Info, &format!("Buffer response is set to: {}", CONFIG.buffer_response));
 
         if CONFIG.buffer_response {
             let features = host_enable_features(2);  // Enable FeatureBufferResponse
-            host_log(LOG_LEVEL_INFO, &format!("Enabled features: {}", features));
+            log(LogLevel::Info, &format!("Enabled features: {}", features));
         }
 
         if let Err(e) = handler.process_request() {
-            host_log(LOG_LEVEL_ERROR, &format!("Error processing request: {}", e));
+            log(LogLevel::Error, &format!("Error processing request: {}", e));
         }
 
-        host_log(LOG_LEVEL_INFO, "Letting Traefik continue processing the request");
+        log(LogLevel::Info, "Letting Traefik continue processing the request");
 
         1 // Always continue processing the request
     }
 
+    /// Handle an HTTP response
+    ///
+    /// This function is called by the Traefik middleware to process an HTTP response.
+    ///
+    /// # Arguments
+    ///
+    /// * `req_ctx` - The request context
+    /// * `is_error` - Indicates if the response is an error
     fn handle_response(req_ctx: i32, is_error: i32) {
-        host_log(LOG_LEVEL_INFO, "Handling response in WASM module");
+        logger::init();
+        log(LogLevel::Info, "Handling response in WASM module");
 
         let handler = HttpHandler;
 
         if let Err(e) = handler.process_response(req_ctx, is_error) {
-            host_log(LOG_LEVEL_ERROR, &format!("Error processing response: {}", e));
+            log(LogLevel::Error, &format!("Error processing response: {}", e));
         }
 
-        host_log(LOG_LEVEL_INFO, "Finished processing response");
+        log(LogLevel::Info, "Finished processing response");
     }
 }
 

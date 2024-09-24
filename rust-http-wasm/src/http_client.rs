@@ -11,11 +11,9 @@ use wasmedge_http_req::{request, uri::Uri};
 #[cfg(not(feature = "wasm"))]
 use reqwest;
 
-use crate::constants::{HTTP_TIMEOUT_SECONDS, LOG_LEVEL_ERROR, LOG_LEVEL_INFO};
+use crate::constants::HTTP_TIMEOUT_SECONDS;
 use crate::error::{Result, TreblleError};
-
-#[cfg(feature = "wasm")]
-use crate::host_functions::host_log;
+use crate::logger::{log, LogLevel};
 
 /// Represents an HTTP client for sending data to Treblle API.
 pub struct HttpClient {
@@ -62,8 +60,8 @@ impl HttpClient {
             match self.attempt_post(url, payload, api_key, timeout) {
                 Ok(()) => return Ok(()),
                 Err(e) => {
-                    host_log(
-                        LOG_LEVEL_ERROR,
+                    log(
+                        LogLevel::Error,
                         &format!("POST attempt failed: {}. Retrying...", e),
                     );
                     // Add a small delay before retrying
@@ -118,7 +116,7 @@ impl HttpClient {
         request.header("X-Api-Key", api_key);
         request.header("Content-Length", &payload.len().to_string());
 
-        host_log(LOG_LEVEL_INFO, &format!("Sending payload to URL: {}", url));
+        log(LogLevel::Debug, &format!("Sending payload to URL: {}", url));
 
         let response = request
             .body(payload)
@@ -126,8 +124,8 @@ impl HttpClient {
             .send(&mut writer)
             .map_err(|e| TreblleError::Http(format!("Failed to send POST request: {}", e)))?;
 
-        host_log(
-            LOG_LEVEL_INFO,
+        log(
+            LogLevel::Debug,
             &format!(
                 "Received response from Treblle API: status {}",
                 response.status_code()
@@ -135,7 +133,7 @@ impl HttpClient {
         );
 
         if response.status_code().is_success() {
-            host_log(LOG_LEVEL_INFO, "Successfully sent data");
+            log(LogLevel::Debug, "Successfully sent data");
             Ok(())
         } else {
             let response_body = String::from_utf8_lossy(&writer);
@@ -145,7 +143,7 @@ impl HttpClient {
                 response_body
             );
 
-            host_log(LOG_LEVEL_ERROR, &error_msg);
+            log(LogLevel::Error, &error_msg);
             Err(TreblleError::Http(error_msg))
         }
     }
