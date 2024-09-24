@@ -5,6 +5,8 @@
 
 use serde::Deserialize;
 
+use std::sync::atomic::{AtomicI32, Ordering};
+
 use crate::constants::{
     LOG_LEVEL_DEBUG, LOG_LEVEL_ERROR, LOG_LEVEL_INFO, LOG_LEVEL_NONE, LOG_LEVEL_WARN,
 };
@@ -15,6 +17,8 @@ use crate::host_functions::host_log;
 
 #[cfg(not(feature = "wasm"))]
 use log::{debug, error, info, warn};
+
+static LOG_LEVEL: AtomicI32 = AtomicI32::new(LOG_LEVEL_INFO);
 
 #[derive(Deserialize, Clone, Debug)]
 pub enum LogLevel {
@@ -78,7 +82,9 @@ pub fn init() {
 
 #[cfg(feature = "wasm")]
 pub fn init() {
-    // No-op for WASM environments, as we're using CONFIG.log_level directly
+    let level = CONFIG.log_level.as_i32();
+    LOG_LEVEL.store(level, Ordering::Relaxed);
+    log(LogLevel::Debug, &format!("Log level set to: {:?}", CONFIG.log_level));
 }
 
 /// Log a message at the specified level.
@@ -91,7 +97,7 @@ pub fn init() {
 /// * `level` - The log level of the message.
 /// * `message` - The message to log.
 pub fn log(level: LogLevel, message: &str) {
-    if level.as_i32() >= CONFIG.log_level.as_i32() {
+    if level.as_i32() >= LOG_LEVEL.load(Ordering::Relaxed) {
         match level {
             LogLevel::Debug => log_debug(message),
             LogLevel::Info => log_info(message),

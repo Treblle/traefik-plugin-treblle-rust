@@ -65,7 +65,7 @@ impl HttpClient {
                         &format!("POST attempt failed: {}. Retrying...", e),
                     );
                     // Add a small delay before retrying
-                    std::thread::sleep(Duration::from_millis(100));
+                    std::thread::sleep(Duration::from_secs(3));
                 }
             }
         }

@@ -20,6 +20,10 @@ experimental:
 serversTransport:
   insecureSkipVerify: true
 
+tcpServersTransport:
+  tls:
+    insecureSkipVerify: true
+
 log:
   level: DEBUG
   filePath: /var/log/traefik/traefik.log

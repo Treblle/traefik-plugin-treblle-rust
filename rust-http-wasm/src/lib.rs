@@ -51,6 +51,8 @@ impl Guest for HttpHandler {
     /// Returns 1 to indicate that Traefik should continue processing the request.
     fn handle_request() -> i64 {
         logger::init();
+        
+        log(LogLevel::Debug, "Initializing request handler");
         log(LogLevel::Info, "Handling request in WASM module");
 
         log(
@@ -85,6 +87,8 @@ impl Guest for HttpHandler {
     /// * `is_error` - Indicates if the response is an error
     fn handle_response(req_ctx: i32, is_error: i32) {
         logger::init();
+
+        log(LogLevel::Debug, "Initializing response handler");
         log(LogLevel::Info, "Handling response in WASM module");
 
         if let Err(e) = HttpHandler.process_response(req_ctx, is_error) {
