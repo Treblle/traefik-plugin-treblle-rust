@@ -3,11 +3,18 @@
 //! This module implements a WASM-based middleware for Traefik that integrates
 //! with Treblle's API monitoring and logging services.
 
+#![cfg_attr(test, allow(unused_imports, dead_code))]
+
+#[cfg(feature = "wasm")]
 mod bindings;
+
+#[cfg(feature = "wasm")]
+mod host_functions;
+
 mod config;
 mod constants;
 mod error;
-mod host_functions;
+
 mod http_client;
 mod payload;
 mod route_blacklist;
@@ -16,28 +23,34 @@ mod utils;
 
 use once_cell::sync::Lazy;
 
+#[cfg(feature = "wasm")]
 use bindings::exports::traefik::http_handler::handler::Guest;
+
+#[cfg(feature = "wasm")]
+use host_functions::*;
+
 use config::Config;
+use constants::{LOG_LEVEL_ERROR, LOG_LEVEL_INFO};
 use error::{Result, TreblleError};
 use http_client::HttpClient;
 use payload::Payload;
 use route_blacklist::RouteBlacklist;
 use schema::ErrorInfo;
-
-use crate::constants::{LOG_LEVEL_ERROR, LOG_LEVEL_INFO};
-use crate::host_functions::*;
 use std::time::Instant;
 
 // Use Lazy static initialization for global state
 static CONFIG: Lazy<Config> = Lazy::new(Config::get_or_fallback);
-static HTTP_CLIENT: Lazy<HttpClient> = Lazy::new(|| HttpClient::new(CONFIG.treblle_api_urls.clone()));
 static BLACKLIST: Lazy<RouteBlacklist> = Lazy::new(|| RouteBlacklist::new(&CONFIG.route_blacklist));
+
+#[cfg(feature = "wasm")]
+static HTTP_CLIENT: Lazy<HttpClient> = Lazy::new(|| HttpClient::new(CONFIG.treblle_api_urls.clone()));
 
 /// The main handler for HTTP requests and responses
 struct HttpHandler;
 
 impl HttpHandler {
     /// Process an incoming HTTP request
+    #[cfg(feature = "wasm")]
     fn process_request(&self) -> Result<()> {
         let start_time = Instant::now();
         
@@ -53,7 +66,11 @@ impl HttpHandler {
             return Ok(());
         }
 
-        let content_type = host_get_header_values(0, "Content-Type").unwrap_or_default();
+        let content_type = host_get_header_values(0, "Content-Type")
+            .map_err(|e| {
+                host_log(LOG_LEVEL_ERROR, &format!("Failed to get Content-Type: {}", e));
+                TreblleError::HostFunction(e.to_string())
+            })?;
         
         host_log(LOG_LEVEL_INFO, &format!("Content-Type: {:?}", content_type));
 
@@ -64,11 +81,18 @@ impl HttpHandler {
         }
 
         let method = host_get_method()?;
-        let headers = self.get_headers(0)?;
+
+        let headers = self.get_headers(0).map_err(|e| {
+            host_log(LOG_LEVEL_ERROR, &format!("Failed to get request headers: {}", e));
+            TreblleError::HostFunction(e.to_string())
+        })?;
 
         host_log(LOG_LEVEL_INFO, "Starting to read request body");
-        
-        let body = self.read_body(0)?;
+
+        let body = self.read_body(1).map_err(|e| {
+            host_log(LOG_LEVEL_ERROR, &format!("Failed to read request body: {}", e));
+            TreblleError::HostFunction(e.to_string())
+        })?;
 
         host_log(LOG_LEVEL_INFO, "Creating Payload");
         
@@ -87,6 +111,7 @@ impl HttpHandler {
     }
 
     /// Process an HTTP response
+    #[cfg(feature = "wasm")]
     fn process_response(&self, _req_ctx: i32, is_error: i32) -> Result<()> {
         if !CONFIG.buffer_response {
             host_log(LOG_LEVEL_INFO, "Not processing response, buffer_response is not enabled");
@@ -100,8 +125,16 @@ impl HttpHandler {
 
         let mut payload = Payload::new();
 
-        let headers = self.get_headers(1)?;
-        let body = self.read_body(1)?;
+        let headers = self.get_headers(1).map_err(|e| {
+            host_log(LOG_LEVEL_ERROR, &format!("Failed to get response headers: {}", e));
+            TreblleError::HostFunction(e.to_string())
+        })?;
+
+        let body = self.read_body(0).map_err(|e| {
+            host_log(LOG_LEVEL_ERROR, &format!("Failed to read response body: {}", e));
+            TreblleError::HostFunction(e.to_string())
+        })?;
+        
         let status_code = host_get_status_code();
 
         payload.update_response_info(status_code, headers, &body, start_time);
@@ -127,6 +160,7 @@ impl HttpHandler {
     }
 
     /// Get HTTP headers
+    #[cfg(feature = "wasm")]
     fn get_headers(&self, header_kind: u32) -> Result<std::collections::HashMap<String, String>> {
         host_log(LOG_LEVEL_INFO, "Starting get_headers");
 
@@ -145,20 +179,20 @@ impl HttpHandler {
     }
 
     /// Read the HTTP body
+    #[cfg(feature = "wasm")]
     fn read_body(&self, body_kind: u32) -> Result<Vec<u8>> {
         match host_read_body(body_kind) {
             Ok(body) => {
-                host_log(LOG_LEVEL_INFO, &format!("Successfully read body: {} bytes", body.len()));
                 Ok(body)
             }
             Err(e) => {
-                host_log(LOG_LEVEL_ERROR, &format!("Failed to read body: {}", e));
                 Err(e)
             }
         }
     }
 
     /// Send data to Treblle API
+    #[cfg(feature = "wasm")]
     fn send_to_treblle(&self, payload: &Payload, start_time: Instant) -> Result<()> {
         host_log(LOG_LEVEL_INFO, "Preparing to send data to Treblle API");
 
@@ -181,6 +215,7 @@ impl HttpHandler {
     }
 }
 
+#[cfg(feature = "wasm")]
 impl Guest for HttpHandler {
     fn handle_request() -> i64 {
         host_log(LOG_LEVEL_INFO, "Handling request in WASM module");
@@ -216,25 +251,14 @@ impl Guest for HttpHandler {
     }
 }
 
+#[cfg(feature = "wasm")]
 #[no_mangle]
 pub extern "C" fn handle_request() -> i64 {
     HttpHandler::handle_request()
 }
 
+#[cfg(feature = "wasm")]
 #[no_mangle]
 pub extern "C" fn handle_response(req_ctx: i32, is_error: i32) {
     HttpHandler::handle_response(req_ctx, is_error)
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_is_blacklisted() {
-        // Implement test for blacklist functionality
-    }
-
-    #[test]
-    fn test_is_json_content_type() {
-        // Implement test for JSON content type check
-    }
 }

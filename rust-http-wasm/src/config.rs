@@ -2,11 +2,14 @@
 //!
 //! This module handles parsing and management of the middleware configuration.
 
-use crate::constants::{DEFAULT_SENSITIVE_KEYS_REGEX, DEFAULT_TREBLLE_API_URLS, LOG_LEVEL_ERROR, LOG_LEVEL_INFO};
-use crate::error::{Result, TreblleError};
-use crate::host_functions::{host_get_config, host_log};
 use serde::Deserialize;
 use serde_json::Value;
+
+use crate::constants::{DEFAULT_SENSITIVE_KEYS_REGEX, DEFAULT_TREBLLE_API_URLS, LOG_LEVEL_ERROR, LOG_LEVEL_INFO};
+use crate::error::{Result, TreblleError};
+
+#[cfg(feature = "wasm")]
+use crate::host_functions::{host_get_config, host_log};
 
 /// Represents the configuration for the Treblle middleware.
 #[derive(Deserialize, Clone, Debug)]
@@ -21,6 +24,7 @@ pub struct Config {
 
 impl Config {
     /// Attempts to get the configuration, falling back to default values if unsuccessful.
+    #[cfg(feature = "wasm")]
     pub fn get_or_fallback() -> Self {
         Self::get().unwrap_or_else(|e| {
             host_log(
@@ -32,11 +36,12 @@ impl Config {
     }
 
     /// Retrieves the configuration from the host environment.
+    #[cfg(feature = "wasm")]
     fn get() -> Result<Self> {
         let raw_config = host_get_config()?;
         let value: Value = serde_json::from_str(&raw_config)
             .map_err(|e| TreblleError::Json(e))?;
-
+        
         host_log(
             LOG_LEVEL_INFO,
             &format!("Received config from host: {}", value),
@@ -45,6 +50,16 @@ impl Config {
         Ok(Self::from_value(value))
     }
 
+    #[cfg(not(feature = "wasm"))]
+    pub fn get_or_fallback() -> Self {
+        Self::fallback()
+    }
+    
+    #[cfg(not(feature = "wasm"))]
+    fn get() -> Result<Self> {
+        Ok(Self::fallback())
+    }
+    
     /// Constructs a Config instance from a serde_json::Value.
     fn from_value(value: Value) -> Self {
         Config {

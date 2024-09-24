@@ -3,12 +3,13 @@
 //! This module handles the creation and manipulation of the payload
 //! that will be sent to the Treblle API.
 
+use std::collections::HashMap;
+use std::time::Instant;
+
 use crate::CONFIG;
 use crate::error::Result;
 use crate::schema::*;
 use crate::utils;
-use std::collections::HashMap;
-use std::time::Instant;
 
 /// Represents the payload that will be sent to the Treblle API.
 pub struct Payload {
@@ -115,7 +116,7 @@ mod tests {
     #[test]
     fn test_payload_new() {
         let config = create_test_config();
-        
+
         let payload = Payload {
             data: TrebllePayload {
                 api_key: config.api_key.clone(),
@@ -135,7 +136,7 @@ mod tests {
     #[test]
     fn test_update_request_info() {
         let config = create_test_config();
-        
+
         let mut payload = Payload {
             data: TrebllePayload {
                 api_key: config.api_key.clone(),
@@ -150,7 +151,7 @@ mod tests {
         let url = "https://api.example.com/test".to_string();
         let headers = HashMap::new();
         let body = b"test body";
-        
+
         payload.update_request_info(method.clone(), url.clone(), headers, body);
 
         assert_eq!(payload.data.data.request.method, method);

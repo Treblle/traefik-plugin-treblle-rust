@@ -8,7 +8,7 @@ PLUGIN_DIR="../plugins-local/src/github.com/momo-gg/rust-http-wasm"
 rustup target add wasm32-wasip1
 
 # Build the WASM plugin
-cargo build --target wasm32-wasip1 --release
+cargo build --target wasm32-wasip1 --release --features wasm
 
 # Remove the existing plugin directory if it exists
 if [ -d "$PLUGIN_DIR" ]; then

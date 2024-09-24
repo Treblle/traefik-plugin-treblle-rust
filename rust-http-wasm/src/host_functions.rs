@@ -3,14 +3,16 @@
 //! This module provides the interface between the WebAssembly module
 //! and the host environment (Traefik).
 
-use crate::error::{Result, TreblleError};
 use core::str;
 use std::ffi::CString;
+
 use crate::constants::{LOG_LEVEL_ERROR, LOG_LEVEL_INFO};
+use crate::error::{Result, TreblleError};
 
 // Defines the external functions provided by the host environment.
 // External functions come from the `http_handler` module exposed by `http-wasm-host-go/api/handler`
 // https://github.com/http-wasm/http-wasm-host-go/blob/main/api/handler/handler.go
+#[cfg(feature = "wasm")]
 #[link(wasm_import_module = "http_handler")]
 extern "C" {
     fn log(level: i32, message: *const u8, message_len: u32);
@@ -31,6 +33,7 @@ extern "C" {
 ///
 /// * `level` - The log level (use constants from `crate::constants`).
 /// * `message` - The message to log.
+#[cfg(feature = "wasm")]
 pub fn host_log(level: i32, message: &str) {
     let sanitized_message = message.replace('\0', "");
     if let Ok(c_message) = CString::new(sanitized_message) {
@@ -49,6 +52,7 @@ pub fn host_log(level: i32, message: &str) {
 /// # Returns
 ///
 /// Returns a bitfield of successfully enabled features.
+#[cfg(feature = "wasm")]
 pub fn host_enable_features(features: u32) -> u32 {
     unsafe { enable_features(features) }
 }
@@ -58,6 +62,7 @@ pub fn host_enable_features(features: u32) -> u32 {
 /// # Returns
 ///
 /// Returns the configuration as a string, or an error if retrieval fails.
+#[cfg(feature = "wasm")]
 pub fn host_get_config() -> Result<String> {
     read_from_buffer(|buf, buf_limit| unsafe { get_config(buf, buf_limit) })
 }
@@ -67,6 +72,7 @@ pub fn host_get_config() -> Result<String> {
 /// # Returns
 ///
 /// Returns the HTTP method as a string, or an error if retrieval fails.
+#[cfg(feature = "wasm")]
 pub fn host_get_method() -> Result<String> {
     read_from_buffer(|buf, buf_limit| unsafe { get_method(buf, buf_limit) })
 }
@@ -76,6 +82,7 @@ pub fn host_get_method() -> Result<String> {
 /// # Returns
 ///
 /// Returns the URI as a string, or an error if retrieval fails.
+#[cfg(feature = "wasm")]
 pub fn host_get_uri() -> Result<String> {
     read_from_buffer(|buf, buf_limit| unsafe { get_uri(buf, buf_limit as u32) })
 }
@@ -85,6 +92,7 @@ pub fn host_get_uri() -> Result<String> {
 /// # Returns
 ///
 /// Returns the protocol version as a string, or an error if retrieval fails.
+#[cfg(feature = "wasm")]
 pub fn host_get_protocol_version() -> Result<String> {
     read_from_buffer(|buf, buf_limit| unsafe { get_protocol_version(buf, buf_limit) })
 }
@@ -98,6 +106,7 @@ pub fn host_get_protocol_version() -> Result<String> {
 /// # Returns
 ///
 /// Returns a comma-separated string of header names, or an error if retrieval fails.
+#[cfg(feature = "wasm")]
 pub fn host_get_header_names(header_kind: u32) -> Result<String> {
     read_from_buffer(|buf, buf_limit| unsafe {
         get_header_names(header_kind, buf, buf_limit) as i32
@@ -114,6 +123,7 @@ pub fn host_get_header_names(header_kind: u32) -> Result<String> {
 /// # Returns
 ///
 /// Returns a comma-separated string of header values, or an error if retrieval fails.
+#[cfg(feature = "wasm")]
 pub fn host_get_header_values(header_kind: u32, name: &str) -> Result<String> {
     let sanitized_name = name.replace('\0', "");
     let c_name = CString::new(sanitized_name)
@@ -139,6 +149,7 @@ pub fn host_get_header_values(header_kind: u32, name: &str) -> Result<String> {
 /// # Returns
 ///
 /// Returns the body as a vector of bytes, or an error if reading fails.
+#[cfg(feature = "wasm")]
 pub fn host_read_body(body_kind: u32) -> Result<Vec<u8>> {
     host_log(LOG_LEVEL_INFO, "Starting to read body");
 
@@ -161,6 +172,7 @@ pub fn host_read_body(body_kind: u32) -> Result<Vec<u8>> {
 /// # Returns
 ///
 /// Returns the status code as an u32.
+#[cfg(feature = "wasm")]
 pub fn host_get_status_code() -> u32 {
     unsafe { get_status_code() }
 }
@@ -174,6 +186,7 @@ pub fn host_get_status_code() -> u32 {
 /// # Returns
 ///
 /// Returns the read data as a string, or an error if reading fails.
+#[cfg(feature = "wasm")]
 fn read_from_buffer<F: Fn(*mut u8, i32) -> i32>(read_fn: F) -> Result<String> {
     let mut buffer = vec![0u8; 4096];
     let len = read_fn(buffer.as_mut_ptr(), buffer.len() as i32);

@@ -31,12 +31,17 @@ generate-rust-toolchain:
 generate-ssl-certs:
 	@./generate-ssl-certs.sh
 
+# Tests the WASM plugin
+test-plugin: check-rust-version generate-rust-toolchain
+	@echo "Testing WASM plugin..."
+	@cd rust-http-wasm && cargo test
+
 # Build the WASM plugin
-build-plugin: check-rust-version generate-rust-toolchain
+build-plugin: test-plugin
 	@echo "Building WASM plugin..."
 	@cd rust-http-wasm && ./build.sh
 
-# Validate the WASM plugin exports
+# Validate the WASM plugin binary exports
 validate-plugin:
 	@./validate-wasm-output.sh
 

@@ -1,14 +1,28 @@
 //! Utility functions for parsing and masking data.
 
-use crate::config::Config;
-use crate::error::Result;
-use crate::schema::{RequestInfo, ResponseInfo};
 use chrono::Utc;
 use regex::Regex;
 use serde_json::{Map, Value};
 use std::time::Instant;
 
+use crate::config::Config;
+use crate::error::{Result, TreblleError};
+use crate::schema::{RequestInfo, ResponseInfo};
+
 /// Parses and processes request information.
+///
+/// # Arguments
+///
+/// * `method` - The HTTP method of the request.
+/// * `uri` - The URI of the request.
+/// * `headers` - A map of request headers.
+/// * `body` - The raw body of the request.
+/// * `config` - The configuration containing sensitive data patterns.
+///
+/// # Returns
+///
+/// Returns a `Result<RequestInfo>` containing the processed request information,
+/// or an error if processing fails.
 pub fn parse_request(
     method: String,
     uri: String,
@@ -20,8 +34,8 @@ pub fn parse_request(
     let user_agent = headers.get("User-Agent").cloned().unwrap_or_default();
 
     let parsed_body = parse_json_body(body);
-    let masked_body = mask_sensitive_data(&parsed_body, &config.sensitive_keys_regex);
-    let masked_headers = mask_sensitive_headers(&headers, &config.sensitive_keys_regex);
+    let masked_body = mask_sensitive_data(&parsed_body, &config.sensitive_keys_regex)?;
+    let masked_headers = mask_sensitive_headers(&headers, &config.sensitive_keys_regex)?;
 
     Ok(RequestInfo {
         timestamp: Utc::now().to_rfc3339(),
@@ -35,6 +49,19 @@ pub fn parse_request(
 }
 
 /// Parses and processes response information.
+///
+/// # Arguments
+///
+/// * `status` - The HTTP status code of the response.
+/// * `headers` - A map of response headers.
+/// * `body` - The raw body of the response.
+/// * `start_time` - The time when the request processing started.
+/// * `config` - The configuration containing sensitive data patterns.
+///
+/// # Returns
+///
+/// Returns a `Result<ResponseInfo>` containing the processed response information,
+/// or an error if processing fails.
 pub fn parse_response(
     status: u32,
     headers: std::collections::HashMap<String, String>,
@@ -43,8 +70,8 @@ pub fn parse_response(
     config: &Config,
 ) -> Result<ResponseInfo> {
     let parsed_body = parse_json_body(body);
-    let masked_body = mask_sensitive_data(&parsed_body, &config.sensitive_keys_regex);
-    let masked_headers = mask_sensitive_headers(&headers, &config.sensitive_keys_regex);
+    let masked_body = mask_sensitive_data(&parsed_body, &config.sensitive_keys_regex)?;
+    let masked_headers = mask_sensitive_headers(&headers, &config.sensitive_keys_regex)?;
 
     Ok(ResponseInfo {
         headers: masked_headers,
@@ -56,14 +83,34 @@ pub fn parse_response(
 }
 
 /// Parses a JSON body, returning a null value if parsing fails.
+///
+/// # Arguments
+///
+/// * `body` - The raw body to parse as JSON.
+///
+/// # Returns
+///
+/// Returns a `Value` representing the parsed JSON, or `Value::Null` if parsing fails.
 pub fn parse_json_body(body: &[u8]) -> Value {
     serde_json::from_slice(body).unwrap_or(Value::Null)
 }
 
 /// Masks sensitive data in a JSON value based on a regex pattern.
-pub fn mask_sensitive_data(data: &Value, sensitive_keys_regex: &str) -> Value {
-    let re = Regex::new(sensitive_keys_regex).expect("Invalid regex pattern");
-    match data {
+///
+/// # Arguments
+///
+/// * `data` - The JSON value to mask.
+/// * `sensitive_keys_regex` - The regex pattern to identify sensitive keys.
+///
+/// # Returns
+///
+/// Returns a `Result<Value>` containing the masked JSON value,
+/// or an error if the regex pattern is invalid.
+pub fn mask_sensitive_data(data: &Value, sensitive_keys_regex: &str) -> Result<Value> {
+    let re = Regex::new(sensitive_keys_regex)
+        .map_err(|e| TreblleError::Regex(e))?;
+
+    Ok(match data {
         Value::Object(map) => {
             let mut new_map = Map::new();
             for (key, value) in map {
@@ -72,7 +119,7 @@ pub fn mask_sensitive_data(data: &Value, sensitive_keys_regex: &str) -> Value {
                 } else {
                     new_map.insert(
                         key.clone(),
-                        mask_sensitive_data(value, sensitive_keys_regex),
+                        mask_sensitive_data(value, sensitive_keys_regex)?,
                     );
                 }
             }
@@ -81,19 +128,31 @@ pub fn mask_sensitive_data(data: &Value, sensitive_keys_regex: &str) -> Value {
         Value::Array(arr) => Value::Array(
             arr.iter()
                 .map(|v| mask_sensitive_data(v, sensitive_keys_regex))
-                .collect(),
+                .collect::<Result<Vec<_>>>()?,
         ),
         _ => data.clone(),
-    }
+    })
 }
 
 /// Masks sensitive headers based on a regex pattern.
+///
+/// # Arguments
+///
+/// * `headers` - A map of headers to mask.
+/// * `sensitive_keys_regex` - The regex pattern to identify sensitive header names.
+///
+/// # Returns
+///
+/// Returns a `Result<HashMap<String, String>>` containing the masked headers,
+/// or an error if the regex pattern is invalid.
 pub fn mask_sensitive_headers(
     headers: &std::collections::HashMap<String, String>,
     sensitive_keys_regex: &str,
-) -> std::collections::HashMap<String, String> {
-    let re = Regex::new(sensitive_keys_regex).expect("Invalid regex pattern");
-    headers
+) -> Result<std::collections::HashMap<String, String>> {
+    let re = Regex::new(sensitive_keys_regex)
+        .map_err(|e| TreblleError::Regex(e))?;
+
+    Ok(headers
         .iter()
         .map(|(key, value)| {
             if re.is_match(key) {
@@ -102,10 +161,19 @@ pub fn mask_sensitive_headers(
                 (key.clone(), value.clone())
             }
         })
-        .collect()
+        .collect())
 }
 
 /// Extracts IP address from headers.
+///
+/// # Arguments
+///
+/// * `headers` - A map of headers to search for IP information.
+///
+/// # Returns
+///
+/// Returns an `Option<String>` containing the extracted IP address,
+/// or `None` if no IP address is found.
 pub fn extract_ip_from_headers(headers: &std::collections::HashMap<String, String>) -> Option<String> {
     headers
         .get("X-Forwarded-For")
@@ -114,6 +182,15 @@ pub fn extract_ip_from_headers(headers: &std::collections::HashMap<String, Strin
 }
 
 /// Checks if a content type is JSON.
+///
+/// # Arguments
+///
+/// * `content_type` - The content type string to check.
+///
+/// # Returns
+///
+/// Returns `true` if the content type indicates JSON, `false` otherwise.
+
 pub fn is_json(content_type: &str) -> bool {
     content_type.to_lowercase().contains("application/json")
 }
@@ -130,15 +207,36 @@ mod tests {
     }
 
     #[test]
-    fn test_mask_sensitive_data() {
+    fn test_mask_sensitive_data() -> Result<()> {
         let data = serde_json::json!({
             "username": "john_doe",
             "password": "secret123",
             "email": "john@example.com"
         });
-        let masked = mask_sensitive_data(&data, r"password|email");
+        let masked = mask_sensitive_data(&data, r"password|email")?;
         assert_eq!(masked["username"], "john_doe");
         assert_eq!(masked["password"], "*****");
         assert_eq!(masked["email"], "*****");
+        Ok(())
+    }
+
+    #[test]
+    fn test_mask_sensitive_headers() -> Result<()> {
+        let mut headers = std::collections::HashMap::new();
+        headers.insert("User-Agent".to_string(), "TestAgent".to_string());
+        headers.insert("Authorization".to_string(), "Bearer token123".to_string());
+
+        let masked = mask_sensitive_headers(&headers, r"Authorization")?;
+
+        assert_eq!(masked["User-Agent"], "TestAgent");
+        assert_eq!(masked["Authorization"], "*****");
+        Ok(())
+    }
+
+    #[test]
+    fn test_invalid_regex() {
+        let data = serde_json::json!({"key": "value"});
+        let result = mask_sensitive_data(&data, r"[invalid regex");
+        assert!(result.is_err());
     }
 }

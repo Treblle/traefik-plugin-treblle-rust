@@ -2,12 +2,20 @@
 //!
 //! This module handles sending data to the Treblle API.
 
-use crate::constants::{HTTP_TIMEOUT_SECONDS, LOG_LEVEL_ERROR, LOG_LEVEL_INFO};
-use crate::error::{Result, TreblleError};
-use crate::host_functions::host_log;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
+
+#[cfg(feature = "wasm")]
 use wasmedge_http_req::{request, uri::Uri};
+
+#[cfg(not(feature = "wasm"))]
+use reqwest;
+
+use crate::constants::{HTTP_TIMEOUT_SECONDS, LOG_LEVEL_ERROR, LOG_LEVEL_INFO};
+use crate::error::{Result, TreblleError};
+
+#[cfg(feature = "wasm")]
+use crate::host_functions::host_log;
 
 /// Represents an HTTP client for sending data to Treblle API.
 pub struct HttpClient {
@@ -44,6 +52,7 @@ impl HttpClient {
     /// # Returns
     ///
     /// Returns `Ok(())` if the request was successful, or an error otherwise.
+    #[cfg(feature = "wasm")]
     pub fn post(&self, payload: &[u8], api_key: &str) -> Result<()> {
         let url = self.get_next_url();
         let timeout = Duration::from_secs(HTTP_TIMEOUT_SECONDS);
@@ -66,6 +75,24 @@ impl HttpClient {
         Err(TreblleError::Http("POST request timed out after all attempts".to_string()))
     }
 
+    #[cfg(not(feature = "wasm"))]
+    pub fn post(&self, payload: &[u8], api_key: &str) -> Result<()> {
+        let url = self.get_next_url();
+        let client = reqwest::blocking::Client::new();
+        let response = client
+            .post(url)
+            .header("Content-Type", "application/json")
+            .header("X-Api-Key", api_key)
+            .body(payload.to_vec())
+            .send()?;
+
+        if response.status().is_success() {
+            Ok(())
+        } else {
+            Err(TreblleError::Http(format!("HTTP error: {}", response.status())))
+        }
+    }
+
     /// Attempts to send a POST request to the specified URL.
     ///
     /// # Arguments
@@ -78,6 +105,7 @@ impl HttpClient {
     /// # Returns
     ///
     /// Returns `Ok(())` if the request was successful, or an error otherwise.
+    #[cfg(feature = "wasm")]
     fn attempt_post(&self, url: &str, payload: &[u8], api_key: &str, timeout: Duration) -> Result<()> {
         let mut writer = Vec::new();
 
@@ -126,18 +154,6 @@ impl HttpClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mockall::predicate::*;
-    use mockall::mock;
-
-    mock! {
-        HttpRequest {
-            fn method(&mut self, _method: request::Method) -> &mut Self;
-            fn header(&mut self, _name: &str, _value: &str) -> &mut Self;
-            fn body(&mut self, _body: &[u8]) -> &mut Self;
-            fn timeout(&mut self, _timeout: Option<Duration>) -> &mut Self;
-            fn send(&self, _writer: &mut Vec<u8>) -> std::result::Result<request::Response, wasmedge_http_req::Error>;
-        }
-    }
 
     #[test]
     fn test_get_next_url() {
@@ -148,25 +164,14 @@ mod tests {
     }
 
     #[test]
-    fn test_post_success() {
-        let mut mock_request = MockHttpRequest::new();
-        mock_request.expect_method()
-            .with(eq(request::Method::POST))
-            .return_const(&mut MockHttpRequest::new());
-        mock_request.expect_header()
-            .times(3)
-            .return_const(&mut MockHttpRequest::new());
-        mock_request.expect_body()
-            .return_const(&mut MockHttpRequest::new());
-        mock_request.expect_timeout()
-            .return_const(&mut MockHttpRequest::new());
-        mock_request.expect_send()
-            .return_once(|_| Ok(request::Response::new(200, vec![], vec![])));
-
-        // You might need to adjust how you inject this mock into your HttpClient
-        // This is a simplified example
-        let client = HttpClient::new(vec!["http://api.treblle.com".to_string()]);
-        let result = client.post(b"test payload", "test_api_key");
-        assert!(result.is_ok());
+    fn test_http_client_creation() {
+        let urls = vec!["https://api1.treblle.com".to_string(), "https://api2.treblle.com".to_string()];
+        let client = HttpClient::new(urls.clone());
+        assert_eq!(client.urls, urls);
+        assert_eq!(client.current_index.load(Ordering::SeqCst), 0);
     }
+
+    // Note: We can't easily test the `post` method without mocking external dependencies.
+    // For thorough testing, we should be using integration tests or a different testing strategy
+    // that doesn't rely on mocking HTTP requests in a WASM environment.
 }
