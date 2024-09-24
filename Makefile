@@ -1,7 +1,7 @@
 include .env
 export
 
-.PHONY: all check-rust-version build-plugin validate-plugin build-run run stop clean
+.PHONY: all check-rust-version build-plugin validate-plugin build-run run stop clean restart register-root-ca
 
 # Default target
 all: check-rust-version build-plugin run
@@ -27,19 +27,15 @@ check-rust-version:
 generate-rust-toolchain:
 	@./generate-rust-toolchain.sh
 
-# Generate SSL certificates for local testing
-generate-ssl-certs:
-	@./generate-ssl-certs.sh
-
 # Tests the WASM plugin
 test-plugin: check-rust-version generate-rust-toolchain
 	@echo "Testing WASM plugin..."
-	@cd rust-http-wasm && cargo test
+	@cd treblle-wasm-plugin && cargo test
 
 # Build the WASM plugin
 build-plugin: test-plugin
 	@echo "Building WASM plugin..."
-	@cd rust-http-wasm && ./build.sh
+	@cd treblle-wasm-plugin && ./build.sh
 
 # Validate the WASM plugin binary exports
 validate-plugin:
@@ -48,6 +44,7 @@ validate-plugin:
 # Run Docker Compose
 run: build-plugin validate-plugin
 	@echo "Starting services with Docker Compose..."
+	docker network create treblle-network
 	docker compose up -d
 
 # Stop Docker Compose
@@ -69,3 +66,6 @@ clean:
 
 # Helper target to rebuild and restart
 restart: clean all
+
+register-root-ca:
+	sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain ./certs/rootCA.pem

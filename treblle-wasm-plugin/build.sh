@@ -2,7 +2,7 @@
 set -e
 
 # Define the plugin directory
-PLUGIN_DIR="../plugins-local/src/github.com/momo-gg/rust-http-wasm"
+PLUGIN_DIR="../plugins-local/src/github.com/momo-gg/treblle-wasm-plugin"
 
 # Ensure the target is installed
 rustup target add wasm32-wasip1

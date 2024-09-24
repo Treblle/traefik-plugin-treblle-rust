@@ -1,6 +1,6 @@
 #!/bin/sh
 
-WASM_MODULE="plugins-local/src/github.com/momo-gg/rust-http-wasm/plugin.wasm"
+WASM_MODULE="plugins-local/src/github.com/momo-gg/treblle-wasm-plugin/plugin.wasm"
 
 # ANSI color codes
 GREEN='\033[0;32m'

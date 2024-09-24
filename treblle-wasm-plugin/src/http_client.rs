@@ -3,7 +3,7 @@
 //! This module handles sending data to the Treblle API.
 
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 #[cfg(feature = "wasm")]
 use wasmedge_http_req::{request, uri::Uri};
@@ -54,25 +54,10 @@ impl HttpClient {
     pub fn post(&self, payload: &[u8], api_key: &str) -> Result<()> {
         let url = self.get_next_url();
         let timeout = Duration::from_secs(HTTP_TIMEOUT_SECONDS);
-        let start_time = Instant::now();
 
-        while start_time.elapsed() < timeout {
-            match self.attempt_post(url, payload, api_key, timeout) {
-                Ok(()) => return Ok(()),
-                Err(e) => {
-                    log(
-                        LogLevel::Error,
-                        &format!("POST attempt failed: {}. Retrying...", e),
-                    );
-                    // Add a small delay before retrying
-                    std::thread::sleep(Duration::from_secs(3));
-                }
-            }
-        }
-
-        Err(TreblleError::Http(
-            "POST request timed out after all attempts".to_string(),
-        ))
+        self.attempt_post(url, payload, api_key, timeout)?;
+        
+        Ok(())
     }
 
     #[cfg(not(feature = "wasm"))]

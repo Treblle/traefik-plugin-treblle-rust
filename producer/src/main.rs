@@ -139,7 +139,8 @@ async fn main() {
         .parse::<u64>()
         .expect("INTERVAL_DURATION must be a valid u64");
 
-    let base_url = env::var("CONSUMER_URL").unwrap_or_else(|_| "https://consumer".to_string());
+    let consumer_url =
+        std::env::var("CONSUMER_URL").unwrap_or_else(|_| "http://consumer:3000".to_string());
 
     // Create a new Axum router with the healthcheck endpoint
     let app = Router::new().route("/health", get(healthcheck));
@@ -149,7 +150,7 @@ async fn main() {
         axum::Server::bind(&"0.0.0.0:3000".parse().unwrap()).serve(app.into_make_service());
 
     // Run the producer logic in another task
-    let producer = run_producer(client, base_url, interval_duration);
+    let producer = run_producer(client, consumer_url, interval_duration);
 
     // Run both tasks concurrently
     tokio::select! {

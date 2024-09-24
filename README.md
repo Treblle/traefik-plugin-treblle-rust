@@ -45,7 +45,7 @@ sequenceDiagram
 
 The project consists of several components:
 
-1. **Traefik Middleware Plugin (`rust-http-wasm`)**: A Rust-based WASM module that integrates with Traefik v3.1 or newer.
+1. **Traefik Middleware Plugin (`treblle-wasm-plugin`)**: A Rust-based WASM module that integrates with Traefik v3.1 or newer.
    - This version is important because Traefik v3.1 introduced enhanced support for WASM plugins required by this project.
 1. **Producer Service (`producer`)**: Generates various HTTP requests, including JSON, plain text, and XML.
 1. **Consumer Service (`consumer`)**: Receives and processes the requests, including handling different routes.
@@ -175,7 +175,7 @@ To update the Rust version used in the project:
 
 ### Modifying the WASM Plugin
 
-The WASM plugin source code is located in the `rust-http-wasm` directory. After making changes:
+The WASM plugin source code is located in the `treblle-wasm-plugin` directory. After making changes:
 
 1. Run `make build-plugin` to rebuild the plugin.
 1. Run `make validate-plugin` to ensure the required exports are present.

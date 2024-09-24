@@ -1,28 +1,32 @@
+global:
+  sendAnonymousUsage: false
+
 api:
-  insecure: true
   dashboard: true
+  insecure: true
 
 entryPoints:
-  web:
+  http:
     address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: https
+          scheme: https
+  https:
+    address: ":443"
 
 providers:
   file:
-    filename: /etc/traefik/traefik_dynamic.yml
+    directory: /etc/traefik
+    watch: true
   docker:
     exposedByDefault: false
 
 experimental:
   localPlugins:
     treblle:
-      moduleName: github.com/momo-gg/rust-http-wasm
-
-serversTransport:
-  insecureSkipVerify: true
-
-tcpServersTransport:
-  tls:
-    insecureSkipVerify: true
+      moduleName: github.com/momo-gg/treblle-wasm-plugin
 
 log:
   level: DEBUG
@@ -41,3 +45,8 @@ metrics:
       - 0.3
       - 1.2
       - 5.0
+
+tls:
+  certificates:
+    - certFile: "/etc/certs/_wildcard.localhost.gg.pem"
+      keyFile: "/etc/certs/_wildcard.localhost.gg-key.pem"

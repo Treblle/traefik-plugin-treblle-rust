@@ -52,6 +52,8 @@ impl HttpHandler {
         let headers = self.get_headers(REQUEST_KIND)?;
         let body = self.read_body(REQUEST_KIND)?;
 
+        self.write_body(REQUEST_KIND, &body)?;
+
         let mut payload = Payload::new();
         self.update_payload(&mut payload, method, uri, headers, &body)?;
 
@@ -93,6 +95,8 @@ impl HttpHandler {
         let headers = self.get_headers(RESPONSE_KIND)?;
         let body = self.read_body(RESPONSE_KIND)?;
         let status_code = host_get_status_code();
+
+        self.write_body(RESPONSE_KIND, &body)?;
 
         payload.update_response_info(status_code, headers, &body, start_time);
 
@@ -171,6 +175,14 @@ impl HttpHandler {
     fn read_body(&self, body_kind: u32) -> Result<Vec<u8>> {
         host_read_body(body_kind).map_err(|e| {
             log(LogLevel::Error, &format!("Failed to read body: {}", e));
+            TreblleError::HostFunction(e.to_string())
+        })
+    }
+
+    #[cfg(feature = "wasm")]
+    fn write_body(&self, body_kind: u32, body: &[u8]) -> Result<()> {
+        host_write_body(body_kind, body).map_err(|e| {
+            log(LogLevel::Error, &format!("Failed to write body: {}", e));
             TreblleError::HostFunction(e.to_string())
         })
     }

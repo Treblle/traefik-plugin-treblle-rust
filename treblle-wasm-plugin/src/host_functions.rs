@@ -31,6 +31,8 @@ extern "C" {
         buf_limit: i32,
     ) -> i64;
     fn read_body(body_kind: u32, ptr: *mut u8, buf_limit: u32) -> i64;
+    fn write_body(body_kind: u32, ptr: *const u8, message_len: u32);
+
     fn get_status_code() -> u32;
 }
 
@@ -174,6 +176,25 @@ pub fn host_read_body(body_kind: u32) -> Result<Vec<u8>> {
         }
         Ok(buffer)
     }
+}
+
+/// Writes the body back to ensure the original request body is available for 
+/// the rest of the request processing pipeline.
+/// 
+/// # Arguments 
+///
+/// * `body_kind` - The kind of body to read (0 for request, 1 for response). 
+/// * `body`: - Original body.
+/// 
+/// # Returns
+/// 
+/// Returns Result<(), TreblleError>
+pub fn host_write_body(body_kind: u32, body: &[u8]) -> Result<()> {
+    unsafe {
+        write_body(body_kind, body.as_ptr(), body.len() as u32);
+    }
+    
+    Ok(())
 }
 
 /// Retrieves the status code of the current response.
