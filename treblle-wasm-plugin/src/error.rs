@@ -2,9 +2,6 @@
 
 use thiserror::Error;
 
-#[cfg(not(feature = "wasm"))]
-use reqwest::Error;
-
 /// Represents errors that can occur in the Treblle middleware.
 #[derive(Error, Debug)]
 pub enum TreblleError {
@@ -27,10 +24,6 @@ pub enum TreblleError {
     /// Represents configuration-related errors.
     #[error("Configuration error: {0}")]
     Config(String),
-
-    #[cfg(not(feature = "wasm"))]
-    #[error("Reqwest error: {0}")]
-    Reqwest(#[from] Error),
 }
 
 /// A specialized Result type for Treblle operations.

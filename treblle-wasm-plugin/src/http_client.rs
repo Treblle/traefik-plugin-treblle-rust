@@ -8,9 +8,6 @@ use std::time::Duration;
 #[cfg(feature = "wasm")]
 use wasmedge_http_req::{request, uri::Uri};
 
-#[cfg(not(feature = "wasm"))]
-use reqwest;
-
 use crate::constants::HTTP_TIMEOUT_SECONDS;
 use crate::error::{Result, TreblleError};
 use crate::logger::{log, LogLevel};
@@ -59,28 +56,7 @@ impl HttpClient {
         
         Ok(())
     }
-
-    #[cfg(not(feature = "wasm"))]
-    pub fn post(&self, payload: &[u8], api_key: &str) -> Result<()> {
-        let url = self.get_next_url();
-        let client = reqwest::blocking::Client::new();
-        let response = client
-            .post(url)
-            .header("Content-Type", "application/json")
-            .header("X-Api-Key", api_key)
-            .body(payload.to_vec())
-            .send()?;
-
-        if response.status().is_success() {
-            Ok(())
-        } else {
-            Err(TreblleError::Http(format!(
-                "HTTP error: {}",
-                response.status()
-            )))
-        }
-    }
-
+    
     /// Attempts to send a POST request to the specified URL.
     ///
     /// # Arguments

@@ -29,9 +29,6 @@
     log = { version = "0.4", optional = true }
     env_logger = { version = "0.11.5", optional = true }
 
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-    reqwest = { version = "0.12.7", features = ["blocking"] }
-
 # Reduce wasm binary size
 [profile.release]
     lto           = true
