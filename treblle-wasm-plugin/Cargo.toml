@@ -35,6 +35,7 @@
     webpki-roots = { version = "0.25", default-features = false }
     url = "2.5.2"
     rustls-pemfile = "2.2.0"
+lazy_static = "1.5.0"
 
 [target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
     ring = { version = "0.17.8", features = [

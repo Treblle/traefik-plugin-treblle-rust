@@ -60,13 +60,7 @@ impl Guest for HttpHandler {
 
         Lazy::force(&HTTP_CLIENT);
         
-        log(LogLevel::Debug, "Initializing request handler!");
-        log(LogLevel::Info, "Handling request in WASM module");
-
-        log(
-            LogLevel::Info,
-            &format!("Buffer response is set to: {}", CONFIG.buffer_response),
-        );
+        log(LogLevel::Debug, "Handling request in WASM module");
 
         if CONFIG.buffer_response {
             let features = host_functions::host_enable_features(2); // Enable FeatureBufferResponse
@@ -79,7 +73,7 @@ impl Guest for HttpHandler {
 
         log(
             LogLevel::Info,
-            "Letting Traefik continue processing the request with next middleware",
+            "Request processed. Letting Traefik continue processing the request with next middleware...",
         );
 
         1 // Always continue processing the request
@@ -95,9 +89,8 @@ impl Guest for HttpHandler {
     /// * `is_error` - Indicates if the response is an error
     fn handle_response(req_ctx: i32, is_error: i32) {
         logger::init();
-
-        log(LogLevel::Debug, "Initializing response handler");
-        log(LogLevel::Info, "Handling response in WASM module");
+        
+        log(LogLevel::Debug, "Handling response in WASM module");
 
         if let Err(e) = HttpHandler.process_response(req_ctx, is_error) {
             log(
@@ -106,7 +99,7 @@ impl Guest for HttpHandler {
             );
         }
 
-        log(LogLevel::Info, "Finished processing response");
+        log(LogLevel::Debug, "Finished processing response");
     }
 }
 

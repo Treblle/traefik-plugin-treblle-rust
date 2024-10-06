@@ -35,7 +35,7 @@ pub fn load_root_certs(root_store: &mut RootCertStore) -> Result<()> {
     if let Some(ca_path) = &CONFIG.root_ca_path {
         match load_custom_certificates(root_store, ca_path) {
             Ok(_) => {
-                log(LogLevel::Info, "Custom root CA loaded successfully");
+                log(LogLevel::Debug, "Custom root CA loaded successfully");
                 return Ok(());
             }
             Err(e) => {
@@ -45,7 +45,7 @@ pub fn load_root_certs(root_store: &mut RootCertStore) -> Result<()> {
     }
 
     load_webpki_roots(root_store)?;
-    log(LogLevel::Info, "Webpki root certificates loaded successfully");
+    log(LogLevel::Debug, "Webpki root certificates loaded successfully");
     Ok(())
 }
 

@@ -2,12 +2,13 @@ use std::io::{self, Write};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 use std::collections::VecDeque;
-
+use std::sync::{Arc, Mutex};
 #[cfg(feature = "wasm")]
 use wasmedge_wasi_socket::{TcpStream, Shutdown};
 
 use rustls::{ClientConfig, ClientConnection, RootCertStore, ServerName, StreamOwned};
 use url::Url;
+use lazy_static::lazy_static;
 
 use crate::error::{Result, TreblleError};
 use crate::logger::{log, LogLevel};
@@ -15,7 +16,7 @@ use crate::certs::load_root_certs;
 use crate::CONFIG;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
-const MAX_POOL_SIZE: usize = 10;
+const MAX_POOL_SIZE: usize = 50;
 const CONNECTION_TIMEOUT: Duration = Duration::from_secs(60);
 
 #[cfg(feature = "wasm")]
@@ -27,22 +28,22 @@ struct PooledConnection {
     last_used: Instant,
 }
 
+lazy_static! {
+    static ref CLIENT_CONFIG: Mutex<Option<Arc<ClientConfig>>> = Mutex::new(None);
+}
+
 pub struct WasiHttpClient {
     treblle_api_urls: Vec<String>,
     current_url_index: AtomicUsize,
-    client_config: ClientConfig,
-    connection_pool: VecDeque<PooledConnection>,
+    connection_pool: Mutex<VecDeque<PooledConnection>>,
 }
 
 impl WasiHttpClient {
     pub fn new(treblle_api_urls: Vec<String>) -> Result<Self> {
-        let client_config = Self::create_tls_config()?;
-        
         Ok(Self {
             treblle_api_urls,
             current_url_index: AtomicUsize::new(0),
-            client_config,
-            connection_pool: VecDeque::new(),
+            connection_pool: Mutex::new(VecDeque::new()),
         })
     }
 
@@ -52,7 +53,7 @@ impl WasiHttpClient {
     }
 
     #[cfg(feature = "wasm")]
-    pub fn post(&mut self, payload: &[u8], api_key: &str) -> Result<()> {
+    pub fn post(&self, payload: &[u8], api_key: &str) -> Result<()> {
         let url = self.get_next_url();
         let parsed_url = Url::parse(&url).map_err(|e| TreblleError::InvalidUrl(e.to_string()))?;
         let host = parsed_url.host_str().ok_or_else(|| TreblleError::InvalidUrl("No host in URL".to_string()))?;
@@ -73,11 +74,13 @@ impl WasiHttpClient {
     }
 
     #[cfg(feature = "wasm")]
-    fn get_connection(&mut self, host: &str, port: u16) -> Result<TlsStream> {
-        // Remove expired connections
-        self.connection_pool.retain(|conn| conn.last_used.elapsed() < CONNECTION_TIMEOUT);
+    fn get_connection(&self, host: &str, port: u16) -> Result<TlsStream> {
+        let mut pool = self.connection_pool.lock().map_err(|e| TreblleError::LockError(e.to_string()))?;
 
-        if let Some(mut pooled_conn) = self.connection_pool.pop_front() {
+        // Remove expired connections
+        pool.retain(|conn| conn.last_used.elapsed() < CONNECTION_TIMEOUT);
+
+        if let Some(mut pooled_conn) = pool.pop_front() {
             pooled_conn.last_used = Instant::now();
             return Ok(pooled_conn.stream);
         }
@@ -88,15 +91,23 @@ impl WasiHttpClient {
 
         let server_name = ServerName::try_from(host)
             .map_err(|_| TreblleError::InvalidHostname(host.to_string()))?;
-        let client = ClientConnection::new(std::sync::Arc::new(self.client_config.clone()), server_name)
+        let client = ClientConnection::new(self.get_client_config()?, server_name)
             .map_err(TreblleError::Tls)?;
         Ok(StreamOwned::new(client, stream))
     }
 
     #[cfg(feature = "wasm")]
-    fn return_connection(&mut self, stream: TlsStream) {
-        if self.connection_pool.len() < MAX_POOL_SIZE {
-            self.connection_pool.push_back(PooledConnection {
+    fn return_connection(&self, stream: TlsStream) {
+        let mut pool = match self.connection_pool.lock() {
+            Ok(guard) => guard,
+            Err(e) => {
+                log(LogLevel::Error, &format!("Failed to acquire lock for connection pool: {}", e));
+                return;
+            }
+        };
+
+        if pool.len() < MAX_POOL_SIZE {
+            pool.push_back(PooledConnection {
                 stream,
                 last_used: Instant::now(),
             });
@@ -115,7 +126,7 @@ impl WasiHttpClient {
             path, host, api_key, payload.len()
         )
     }
-    
+
     fn send_non_blocking<W: Write>(&self, writer: &mut W, data: &[u8]) -> Result<()> {
         let mut written = 0;
         let start = Instant::now();
@@ -147,5 +158,17 @@ impl WasiHttpClient {
             .with_no_client_auth();
 
         Ok(config)
+    }
+
+    fn get_client_config(&self) -> Result<Arc<ClientConfig>> {
+        let mut config_guard = CLIENT_CONFIG.lock().map_err(|e| TreblleError::LockError(e.to_string()))?;
+
+        if let Some(config) = config_guard.as_ref() {
+            return Ok(config.clone());
+        }
+        
+        let new_config = Arc::new(Self::create_tls_config()?);
+        *config_guard = Some(new_config.clone());
+        Ok(new_config)
     }
 }

@@ -35,7 +35,7 @@ impl HttpHandler {
     #[cfg(feature = "wasm")]
     pub fn process_request(&self) -> Result<()> {
         let start_time = Instant::now();
-        log(LogLevel::Info, "Processing request...");
+        log(LogLevel::Debug, "Processing request...");
 
         let uri = self.get_uri()?;
         if BLACKLIST.is_blacklisted(&uri) {
@@ -60,7 +60,7 @@ impl HttpHandler {
 
         self.send_to_treblle(&payload, start_time)?;
 
-        log(LogLevel::Info, "Request processing completed successfully");
+        log(LogLevel::Debug, "Request processing completed successfully");
 
         Ok(())
     }
@@ -90,7 +90,7 @@ impl HttpHandler {
 
         let start_time = Instant::now();
 
-        log(LogLevel::Info, "Processing response...");
+        log(LogLevel::Debug, "Processing response...");
 
         let mut payload = Payload::new();
         let headers = self.get_headers(RESPONSE_KIND)?;
@@ -109,7 +109,7 @@ impl HttpHandler {
 
         self.send_to_treblle(&payload, start_time)?;
 
-        log(LogLevel::Info, "Response processing completed successfully");
+        log(LogLevel::Debug, "Response processing completed successfully");
 
         Ok(())
     }
@@ -146,7 +146,7 @@ impl HttpHandler {
 
     #[cfg(feature = "wasm")]
     fn get_headers(&self, header_kind: u32) -> Result<HashMap<String, String>> {
-        log(LogLevel::Info, "Starting get_headers");
+        log(LogLevel::Debug, "Starting get_headers");
 
         let header_names = host_get_header_names(header_kind).map_err(|e| {
             log(
@@ -165,7 +165,7 @@ impl HttpHandler {
         }
 
         log(
-            LogLevel::Info,
+            LogLevel::Debug,
             &format!("Total headers processed: {}", headers.len()),
         );
 
@@ -232,11 +232,11 @@ impl HttpHandler {
 
     #[cfg(feature = "wasm")]
     fn send_to_treblle(&self, payload: &Payload, start_time: Instant) -> Result<()> {
-        log(LogLevel::Info, "Preparing to send data to Treblle API");
+        log(LogLevel::Debug, "Preparing to send data to Treblle API");
 
         let payload_json = payload.to_json()?;
         log(
-            LogLevel::Info,
+            LogLevel::Debug,
             &format!("Payload JSON length: {}", payload_json.len()),
         );
 
@@ -258,7 +258,7 @@ impl HttpHandler {
             })?;
 
         log(
-            LogLevel::Info,
+            LogLevel::Debug,
             &format!(
                 "Data sent successfully to Treblle API in {} ms",
                 start_time.elapsed().as_millis()
