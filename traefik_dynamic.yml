@@ -3,13 +3,13 @@ http:
     treblle-middleware:
       plugin:
         treblle:
-          treblleApiUrls:
-            [
-              "http://treblle-api:3000/api",
-              "https://treblle-api.localhost.gg/api",
-              "https://rocknrolla.treblle.com",
-              "https://punisher.treblle.com",
-              "https://sicario.treblle.com",
+          treblleApiUrls: [
+              "http://httpbin.org/post",
+              "https://httpbin.org/post",
+              # "http://treblle-api:3000/api",
+              # "https://rocknrolla.treblle.com",
+              # "https://punisher.treblle.com",
+              # "https://sicario.treblle.com",
             ]
           apiKey: "L8mhMopwLdNCSBdRWaF4MhDuEdN4H3kN"
           projectId: "cM4nke7Aav0Xdqnn"

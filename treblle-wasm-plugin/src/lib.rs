@@ -10,6 +10,7 @@ mod bindings;
 #[cfg(feature = "wasm")]
 mod host_functions;
 
+mod certs;
 mod config;
 mod constants;
 mod error;
@@ -51,6 +52,11 @@ impl Guest for HttpHandler {
     /// Returns 1 to indicate that Traefik should continue processing the request.
     fn handle_request() -> i64 {
         logger::init();
+
+        match certs::load_root_certificate() {
+            Ok(cert) => log(LogLevel::Info, &format!("Root certificate loaded, length: {}", cert.len())),
+            Err(e) => log(LogLevel::Error, &format!("Failed to load root certificate: {}", e)),
+        }
         
         log(LogLevel::Debug, "Initializing request handler");
         log(LogLevel::Info, "Handling request in WASM module");

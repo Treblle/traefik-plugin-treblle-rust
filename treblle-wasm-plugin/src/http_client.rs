@@ -2,6 +2,7 @@
 //!
 //! This module handles sending data to the Treblle API.
 
+use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
@@ -89,6 +90,10 @@ impl HttpClient {
         request.header("X-Api-Key", api_key);
         request.header("Content-Length", &payload.len().to_string());
 
+        // Set the root certificate file path
+        let cert_path = Path::new("/etc/certs/rootCA.pem");
+        request.root_cert_file_pem(cert_path);
+
         log(LogLevel::Debug, &format!("Sending payload to URL: {}", url));
 
         let response = request
@@ -104,6 +109,23 @@ impl HttpClient {
                 response.status_code()
             ),
         );
+
+        log(LogLevel::Debug, "Response headers:");
+        for (key, value) in response.headers().iter() {
+            log(LogLevel::Debug, &format!("  {}: {}", key, value));
+        }
+
+        let response_body = String::from_utf8_lossy(&writer);
+        log(LogLevel::Debug, "Response body:");
+        match serde_json::from_str::<serde_json::Value>(&response_body) {
+            Ok(json) => {
+                match serde_json::to_string_pretty(&json) {
+                    Ok(pretty) => log(LogLevel::Debug, &pretty),
+                    Err(_) => log(LogLevel::Debug, &response_body),
+                }
+            }
+            Err(_) => log(LogLevel::Debug, &response_body),
+        }
 
         if response.status_code().is_success() {
             log(LogLevel::Debug, "Successfully sent data");

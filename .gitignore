@@ -127,6 +127,7 @@ $RECYCLE.BIN/
 
 # Wasm Tools
 wabt/
+wasi-sdk-*/
 
 # Traefik debugging
 logs/

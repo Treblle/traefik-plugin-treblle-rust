@@ -22,7 +22,7 @@ mkdir -p "$PLUGIN_DIR"
 
 # Copy the compiled WASM file
 echo "Copying WASM plugin..."
-cp target/wasm32-wasip1/release/rust_http_wasm.wasm "$PLUGIN_DIR/plugin.wasm"
+cp target/wasm32-wasip1/release/treblle_wasm_plugin.wasm "$PLUGIN_DIR/plugin.wasm"
 
 # Copy the .traefik.yml file
 echo "Copying .traefik.yml..."

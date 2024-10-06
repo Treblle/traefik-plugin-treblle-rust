@@ -39,6 +39,8 @@ services:
       - "traefik.http.services.producer.loadbalancer.server.port=3000"
     networks:
       - treblle-network
+    profiles:
+      - local_treblle_api
 
   consumer:
     build:
@@ -70,6 +72,8 @@ services:
       - "traefik.http.services.treblle-api.loadbalancer.server.port=3000"
     networks:
       - treblle-network
+    profiles:
+      - local_treblle_api
 
   mkcert:
     environment:
