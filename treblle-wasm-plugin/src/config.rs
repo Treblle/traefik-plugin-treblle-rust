@@ -22,6 +22,7 @@ pub struct Config {
     pub sensitive_keys_regex: String,
     pub buffer_response: bool,
     pub log_level: LogLevel,
+    pub root_ca_path: Option<String>,
 }
 
 impl Config {
@@ -140,6 +141,11 @@ impl Config {
                 .and_then(|v| v.as_str())
                 .map(LogLevel::from_str)
                 .unwrap_or_default(),
+
+            root_ca_path: value
+                .get("rootCaPath")
+                .and_then(|v| v.as_str())
+                .map(String::from),
         }
     }
 
@@ -156,6 +162,7 @@ impl Config {
             sensitive_keys_regex: DEFAULT_SENSITIVE_KEYS_REGEX.to_string(),
             buffer_response: false,
             log_level: LogLevel::None,
+            root_ca_path: None,
         }
     }
 
@@ -187,7 +194,8 @@ mod tests {
             "routeBlacklist": ["/health", "/metrics"],
             "sensitiveKeysRegex": "password|secret",
             "bufferResponse": true,
-            "logLevel": "warn"
+            "logLevel": "warn",
+            "rootCaPath": "/etc/certs/rootCA.pem"
         });
 
         let config = Config::from_value(value);
@@ -202,6 +210,7 @@ mod tests {
         assert_eq!(config.sensitive_keys_regex, "password|secret");
         assert!(config.buffer_response);
         assert!(matches!(config.log_level, LogLevel::Warn));
+        assert_eq!(config.root_ca_path, Some("/etc/certs/rootCA.pem".to_string()));
     }
 
     #[test]
@@ -221,6 +230,7 @@ mod tests {
         assert_eq!(config.sensitive_keys_regex, DEFAULT_SENSITIVE_KEYS_REGEX);
         assert!(!config.buffer_response);
         assert!(matches!(config.log_level, LogLevel::None));
+        assert_eq!(config.root_ca_path, None);
     }
 
     #[test]
@@ -233,6 +243,7 @@ mod tests {
             sensitive_keys_regex: "".to_string(),
             buffer_response: false,
             log_level: Default::default(),
+            root_ca_path: None,
         };
 
         assert!(valid_config.validate().is_ok());
@@ -245,6 +256,7 @@ mod tests {
             sensitive_keys_regex: "".to_string(),
             buffer_response: false,
             log_level: Default::default(),
+            root_ca_path: None,
         };
 
         assert!(invalid_config.validate().is_err());

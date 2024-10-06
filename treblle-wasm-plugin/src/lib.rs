@@ -14,7 +14,6 @@ mod certs;
 mod config;
 mod constants;
 mod error;
-mod http_client;
 mod http_handler;
 mod logger;
 mod payload;
@@ -29,7 +28,6 @@ use once_cell::sync::Lazy;
 use bindings::exports::traefik::http_handler::handler::Guest;
 
 use config::Config;
-use http_client::HttpClient;
 use http_handler::HttpHandler;
 use logger::{log, LogLevel};
 use route_blacklist::RouteBlacklist;

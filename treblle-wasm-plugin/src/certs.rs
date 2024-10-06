@@ -1,37 +1,130 @@
+//! Certificate handling module for the Treblle middleware.
+//!
+//! This module provides functionality for loading root certificates,
+//! either from a custom file specified in the configuration or from
+//! the webpki-roots bundle.
+
+use rustls::{OwnedTrustAnchor, RootCertStore};
 use std::fs::File;
-use std::io::Read;
+use std::io::BufReader;
+use crate::error::{Result, TreblleError};
 use crate::logger::{log, LogLevel};
+use crate::CONFIG;
 
-pub fn load_root_certificate() -> Result<String, std::io::Error> {
-    log(LogLevel::Debug, "Attempting to load root certificate");
-
-    let cert_paths = vec![
-        "/etc/certs/rootCA.pem",
-        "/etc/rootCA.pem",
-        "/etc/certs/ca.crt",
-        "/etc/ca.crt",
-    ];
-
-    for path in cert_paths {
-        log(LogLevel::Debug, &format!("Trying to open certificate file: {}", path));
-        match File::open(path) {
-            Ok(mut file) => {
-                log(LogLevel::Debug, &format!("Successfully opened file: {}", path));
-                let mut contents = String::new();
-                match file.read_to_string(&mut contents) {
-                    Ok(_) => {
-                        log(LogLevel::Info, &format!("Successfully read certificate from: {}", path));
-                        log(LogLevel::Debug, "Certificate content:");
-                        log(LogLevel::Debug, &contents);
-                        return Ok(contents);
-                    }
-                    Err(e) => log(LogLevel::Error, &format!("Failed to read file {}: {}", path, e)),
-                }
+/// Loads root certificates into the provided `RootCertStore`.
+///
+/// This function first attempts to load custom certificates if a path
+/// is specified in the configuration. If that fails or no path is
+/// specified, it falls back to loading the webpki-roots bundle.
+///
+/// # Arguments
+///
+/// * `root_store` - A mutable reference to the `RootCertStore` to load certificates into.
+///
+/// # Returns
+///
+/// A `Result` indicating success or failure of the certificate loading process.
+///
+/// # Errors
+///
+/// This function will return an error if:
+/// - The custom certificate file cannot be opened or read.
+/// - The custom certificates cannot be parsed.
+/// - The certificates cannot be added to the `RootCertStore`.
+pub fn load_root_certs(root_store: &mut RootCertStore) -> Result<()> {
+    if let Some(ca_path) = &CONFIG.root_ca_path {
+        match load_custom_certificates(root_store, ca_path) {
+            Ok(_) => {
+                log(LogLevel::Info, "Custom root CA loaded successfully");
+                return Ok(());
             }
-            Err(e) => log(LogLevel::Error, &format!("Failed to open file {}: {}", path, e)),
+            Err(e) => {
+                log(LogLevel::Error, &format!("Failed to load custom root CA: {}. Falling back to webpki-roots.", e));
+            }
         }
     }
 
-    log(LogLevel::Error, "Failed to load root certificate from any known location");
-    Err(std::io::Error::new(std::io::ErrorKind::NotFound, "Root certificate not found"))
+    load_webpki_roots(root_store)?;
+    log(LogLevel::Info, "Webpki root certificates loaded successfully");
+    Ok(())
+}
+
+/// Loads custom certificates from a specified file path.
+///
+/// # Arguments
+///
+/// * `root_store` - A mutable reference to the `RootCertStore` to load certificates into.
+/// * `ca_path` - The file path of the custom root CA certificate.
+///
+/// # Returns
+///
+/// A `Result` indicating success or failure of the custom certificate loading process.
+///
+/// # Errors
+///
+/// This function will return an error if:
+/// - The certificate file cannot be opened or read.
+/// - The certificates cannot be parsed.
+/// - The certificates cannot be added to the `RootCertStore`.
+fn load_custom_certificates(root_store: &mut RootCertStore, ca_path: &str) -> Result<()> {
+    let file = File::open(ca_path).map_err(|e| {
+        log(LogLevel::Error, &format!("Failed to open custom root CA file: {}", e));
+        TreblleError::CertificateError(format!("Failed to open custom root CA file: {}", e))
+    })?;
+
+    let mut reader = BufReader::new(file);
+    let certs = rustls_pemfile::certs(&mut reader)
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(|e| {
+            log(LogLevel::Error, &format!("Failed to parse custom root CA file: {}", e));
+            TreblleError::CertificateError(format!("Failed to parse custom root CA file: {}", e))
+        })?;
+
+    if certs.is_empty() {
+        log(LogLevel::Error, "No certificates found in the custom root CA file");
+        return Err(TreblleError::CertificateError("No certificates found in the custom root CA file".to_string()));
+    }
+
+    for cert in certs {
+        root_store.add(&rustls::Certificate(cert.to_vec())).map_err(|e| {
+            log(LogLevel::Error, &format!("Failed to add custom root CA to store: {}", e));
+            TreblleError::CertificateError(format!("Failed to add custom root CA to store: {}", e))
+        })?;
+    }
+
+    Ok(())
+}
+
+/// Loads the default webpki-roots certificate bundle.
+///
+/// # Arguments
+///
+/// * `root_store` - A mutable reference to the `RootCertStore` to load certificates into.
+///
+/// # Returns
+///
+/// A `Result` indicating success or failure of the webpki-roots loading process.
+fn load_webpki_roots(root_store: &mut RootCertStore) -> Result<()> {
+    root_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
+        OwnedTrustAnchor::from_subject_spki_name_constraints(
+            ta.subject,
+            ta.spki,
+            ta.name_constraints,
+        )
+    }));
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_load_webpki_roots() {
+        let mut root_store = RootCertStore::empty();
+        let result = load_webpki_roots(&mut root_store);
+        assert!(result.is_ok());
+        assert!(root_store.len() > 0);
+    }
 }

@@ -1,27 +1,45 @@
 use std::io::{self, Read, Write};
 use std::time::{Duration, Instant};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 
 #[cfg(feature = "wasm")]
 use wasmedge_wasi_socket::{TcpStream, Shutdown};
 
-use std::sync::atomic::{AtomicUsize, Ordering};
+use rustls::{ClientConfig, ClientConnection, OwnedTrustAnchor, RootCertStore, ServerName, StreamOwned};
+use url::Url;
+
 use crate::error::{Result, TreblleError};
 use crate::logger::{log, LogLevel};
-use rustls::{ClientConfig, ClientConnection, OwnedTrustAnchor, RootCertStore, ServerName, StreamOwned};
-use std::sync::Arc;
-use std::fs::File;
-use std::io::BufReader;
+use crate::certs::load_root_certs;
 
+const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// A client for making HTTP requests in a WASM WASI environment.
 pub struct WasiHttpClient {
     treblle_api_urls: Vec<String>,
     current_url_index: AtomicUsize,
+    client_config: ClientConfig,
 }
 
 impl WasiHttpClient {
+    /// Creates a new `WasiHttpClient` instance.
+    ///
+    /// # Arguments
+    ///
+    /// * `treblle_api_urls` - A vector of Treblle API URLs to use for requests.
+    ///
+    /// # Returns
+    ///
+    /// A new `WasiHttpClient` instance.
     pub fn new(treblle_api_urls: Vec<String>) -> Self {
+        let client_config = Self::create_tls_config()
+            .expect("Failed to create TLS config");
+
         Self {
             treblle_api_urls,
             current_url_index: AtomicUsize::new(0),
+            client_config,
         }
     }
 
@@ -30,101 +48,50 @@ impl WasiHttpClient {
         self.treblle_api_urls[index].clone()
     }
 
+    /// Sends a POST request to the Treblle API.
+    ///
+    /// # Arguments
+    ///
+    /// * `payload` - The JSON payload to send.
+    /// * `api_key` - The API key for authentication.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing the response as a string if successful.
     #[cfg(feature = "wasm")]
     pub fn post(&self, payload: &[u8], api_key: &str) -> Result<()> {
         log(LogLevel::Debug, "Entering post method");
         let url = self.get_next_url();
         log(LogLevel::Debug, &format!("Got URL: {}", url));
 
-        let (host, port, path) = match Self::parse_url(&url) {
-            Ok((h, p, path)) => {
-                log(LogLevel::Debug, &format!("Parsed URL - host: {}, port: {}, path: {}", h, p, path));
-                (h, p, path)
-            },
-            Err(e) => {
-                log(LogLevel::Error, &format!("Failed to parse URL: {}", e));
-                return Err(e);
-            }
-        };
+        let parsed_url = Url::parse(&url).map_err(|e| TreblleError::InvalidUrl(e.to_string()))?;
+        let host = parsed_url.host_str().ok_or_else(|| TreblleError::InvalidUrl("No host in URL".to_string()))?;
+        let port = parsed_url.port_or_known_default().ok_or_else(|| TreblleError::InvalidUrl("Invalid port".to_string()))?;
+        let path = parsed_url.path();
+
+        log(LogLevel::Debug, &format!("Parsed URL - host: {}, port: {}, path: {}", host, port, path));
 
         let start_time = Instant::now();
-        log(LogLevel::Debug, &format!("Connecting to host: {}, port: {}", host, port));
+        let timeout = Duration::from_secs(30); // Default timeout
+        let stream = self.connect_with_timeout(host, port, timeout)?;
 
-        let mut stream = self.connect_with_timeout(&format!("{}:{}", host, port), Duration::from_secs(10))?;
-        log(LogLevel::Debug, &format!("Connection established in {:?}", start_time.elapsed()));
-
-        stream.set_nonblocking(true)?;
-
-        // Set up TLS
-        let tls_config = self.create_tls_config()?;
-        let server_name = ServerName::try_from(host.as_str())
-            .map_err(|_| TreblleError::InvalidHostname)?;
-        let conn = ClientConnection::new(Arc::new(tls_config), server_name)?;
-        let mut tls_stream = StreamOwned::new(conn, stream);
-
-        let request = self.build_post_request(&host, &path, payload, api_key);
-        log(LogLevel::Debug, &format!("Sending request:\n{}", request));
-
-        let write_start = Instant::now();
-        self.write_with_timeout(&mut tls_stream, request.as_bytes(), Duration::from_secs(10))?;
-        log(LogLevel::Debug, &format!("Request sent in {:?}", write_start.elapsed()));
-
-        let mut response = Vec::new();
-        self.read_response(&mut tls_stream, &mut response, Duration::from_secs(10))?;
-
-        let elapsed = start_time.elapsed();
-        log(LogLevel::Debug, &format!("Full request-response cycle completed in {:?}", elapsed));
-
-        self.handle_response(&response)
-    }
-
-    fn create_tls_config(&self) -> Result<ClientConfig> {
-        let mut root_store = RootCertStore::empty();
-
-        // Try to load custom root CA
-        match Self::load_custom_root_ca() {
-            Ok(custom_ca) => {
-                root_store.add(&custom_ca)?;
-                log(LogLevel::Info, "Custom root CA loaded successfully");
-            }
-            Err(_) => {
-                log(LogLevel::Info, "Failed to load custom root CA, falling back to webpki-roots");
-                root_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
-                    OwnedTrustAnchor::from_subject_spki_name_constraints(
-                        ta.subject,
-                        ta.spki,
-                        ta.name_constraints,
-                    )
-                }));
-            }
+        if parsed_url.scheme() == "https" {
+            let tls_stream = self.establish_tls(stream, host)?;
+            self.send_request(tls_stream, host, path, payload, api_key, start_time, timeout)
+        } else {
+            self.send_request(stream, host, path, payload, api_key, start_time, timeout)
         }
-
-        let config = ClientConfig::builder()
-            .with_safe_defaults()
-            .with_root_certificates(root_store)
-            .with_no_client_auth();
-
-        Ok(config)
-    }
-
-    fn load_custom_root_ca() -> Result<rustls::Certificate> {
-        let mut file = File::open("/etc/certs/rootCA.pem")?;
-        let mut pem = Vec::new();
-        file.read_to_end(&mut pem)?;
-        let certs = rustls_pemfile::certs(&mut pem.as_slice())
-            .filter_map(|result| result.ok())
-            .collect::<Vec<_>>();
-        certs.into_iter().next()
-            .map(|cert_der| rustls::Certificate(cert_der.to_vec()))
-            .ok_or_else(|| TreblleError::CertificateError("No certificate found in PEM file".to_string()))
     }
 
     #[cfg(feature = "wasm")]
-    fn connect_with_timeout(&self, addr: &str, timeout: Duration) -> Result<TcpStream> {
+    fn connect_with_timeout(&self, host: &str, port: u16, timeout: Duration) -> Result<TcpStream> {
         let start = Instant::now();
         while start.elapsed() < timeout {
-            match TcpStream::connect(addr) {
-                Ok(stream) => return Ok(stream),
+            match TcpStream::connect((host, port)) {
+                Ok(stream) => {
+                    log(LogLevel::Debug, &format!("Connection established in {:?}", start.elapsed()));
+                    return Ok(stream);
+                }
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
                     std::thread::sleep(Duration::from_millis(10));
                 }
@@ -134,53 +101,60 @@ impl WasiHttpClient {
         Err(TreblleError::TimeoutError)
     }
 
-    fn write_with_timeout<W: Write>(&self, writer: &mut W, buf: &[u8], timeout: Duration) -> Result<()> {
-        let start = Instant::now();
-        let mut written = 0;
+    #[cfg(feature = "wasm")]
+    fn establish_tls(&self, tcp_stream: TcpStream, host: &str) -> Result<StreamOwned<ClientConnection, TcpStream>> {
+        let config = Arc::new(self.client_config.clone());
+        let server_name = ServerName::try_from(host)
+            .map_err(|_| TreblleError::InvalidHostname)?;
+        let conn = ClientConnection::new(config, server_name)?;
+        Ok(StreamOwned::new(conn, tcp_stream))
+    }
 
-        while written < buf.len() {
-            if start.elapsed() > timeout {
-                return Err(TreblleError::Io(io::Error::new(io::ErrorKind::TimedOut, "Write timed out")));
-            }
+    fn send_request<T: Read + Write>(&self, mut stream: T, host: &str, path: &str, payload: &[u8], api_key: &str, start_time: Instant, timeout: Duration) -> Result<()> {
+        self.write_request(&mut stream, host, path, payload, api_key)?;
+        let response = self.read_response(&mut stream, start_time, timeout)?;
+        self.handle_response(&response)
+    }
 
-            match writer.write(&buf[written..]) {
-                Ok(n) => written += n,
-                Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                    std::thread::yield_now();
-                }
-                Err(e) => return Err(TreblleError::Io(e)),
-            }
-        }
-
+    fn write_request<T: Write>(&self, stream: &mut T, host: &str, path: &str, payload: &[u8], api_key: &str) -> Result<()> {
+        let request = format!(
+            "POST {} HTTP/1.1\r\n\
+             Host: {}\r\n\
+             Content-Type: application/json\r\n\
+             X-Api-Key: {}\r\n\
+             Content-Length: {}\r\n\
+             \r\n",
+            path, host, api_key, payload.len()
+        );
+        stream.write_all(request.as_bytes())?;
+        stream.write_all(payload)?;
+        stream.flush()?;
         Ok(())
     }
 
-    fn read_response<R: Read>(&self, reader: &mut R, response: &mut Vec<u8>, timeout: Duration) -> Result<()> {
-        let start = Instant::now();
-        let mut buf = [0; 4096];
+    fn read_response<T: Read>(&self, stream: &mut T, start_time: Instant, timeout: Duration) -> Result<Vec<u8>> {
+        let mut response = Vec::new();
+        let mut buffer = [0; 1024];
 
-        loop {
-            if start.elapsed() > timeout {
-                return Err(TreblleError::Io(io::Error::new(io::ErrorKind::TimedOut, "Read timed out")));
-            }
-
-            match reader.read(&mut buf) {
+        while start_time.elapsed() < timeout {
+            match stream.read(&mut buffer) {
                 Ok(0) => break,
                 Ok(n) => {
-                    response.extend_from_slice(&buf[..n]);
-                    if self.is_response_complete(response) {
+                    response.extend_from_slice(&buffer[..n]);
+                    if self.is_response_complete(&response) {
                         break;
                     }
                 }
-                Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                    std::thread::yield_now();
-                }
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => continue,
                 Err(e) => return Err(TreblleError::Io(e)),
             }
         }
 
-        log(LogLevel::Debug, &format!("Response read in {:?}", start.elapsed()));
-        Ok(())
+        if response.is_empty() {
+            return Err(TreblleError::TimeoutError);
+        }
+
+        Ok(response)
     }
 
     fn is_response_complete(&self, response: &[u8]) -> bool {
@@ -198,34 +172,6 @@ impl WasiHttpClient {
             .find(|line| line.to_lowercase().starts_with("content-length:"))
             .and_then(|line| line.split(':').nth(1))
             .and_then(|len| len.trim().parse().ok())
-    }
-
-    fn parse_url(url: &str) -> Result<(String, u16, String)> {
-        log(LogLevel::Debug, &format!("Parsing URL: {}", url));
-        let url = url::Url::parse(url).map_err(|e| TreblleError::InvalidUrl(e.to_string()))?;
-        let host = url.host_str().ok_or_else(|| TreblleError::InvalidUrl("No host in URL".to_string()))?.to_string();
-        let port = url.port().unwrap_or_else(|| if url.scheme() == "https" { 443 } else { 80 });
-        let path = url.path().to_string();
-
-        log(LogLevel::Debug, &format!("Parsed URL - host: {}, port: {}, path: {}", host, port, path));
-        Ok((host, port, path))
-    }
-
-    fn build_post_request(&self, host: &str, path: &str, payload: &[u8], api_key: &str) -> String {
-        format!(
-            "POST {} HTTP/1.1\r\n\
-             Host: {}\r\n\
-             Content-Type: application/json\r\n\
-             X-Api-Key: {}\r\n\
-             Content-Length: {}\r\n\
-             \r\n\
-             {}",
-            path,
-            host,
-            api_key,
-            payload.len(),
-            String::from_utf8_lossy(payload)
-        )
     }
 
     fn handle_response(&self, response: &[u8]) -> Result<()> {
@@ -257,5 +203,50 @@ impl WasiHttpClient {
 
         log(LogLevel::Debug, "Successfully sent data");
         Ok(())
+    }
+
+    fn create_tls_config() -> Result<ClientConfig> {
+        let mut root_store = RootCertStore::empty();
+        load_root_certs(&mut root_store)?;
+
+        let config = ClientConfig::builder()
+            .with_safe_defaults()
+            .with_root_certificates(root_store)
+            .with_no_client_auth();
+
+        Ok(config)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    #[test]
+    fn test_write_request() {
+        let client = WasiHttpClient::new(vec!["https://api.treblle.com".to_string()]);
+        let mut buffer = Vec::new();
+        client.write_request(&mut buffer, "api.treblle.com", "/v1/log", b"{\"key\":\"value\"}", "test-api-key")
+            .expect("Failed to write request");
+
+        let request = String::from_utf8(buffer).expect("Invalid UTF-8");
+        assert!(request.starts_with("POST /v1/log HTTP/1.1\r\n"));
+        assert!(request.contains("Host: api.treblle.com\r\n"));
+        assert!(request.contains("Content-Type: application/json\r\n"));
+        assert!(request.contains("X-Api-Key: test-api-key\r\n"));
+        assert!(request.ends_with("\r\n\r\n{\"key\":\"value\"}"));
+    }
+
+    #[test]
+    fn test_read_response() {
+        let client = WasiHttpClient::new(vec!["https://api.treblle.com".to_string()]);
+        let response_data = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 20\r\n\r\n{\"status\":\"success\"}";
+        let mut cursor = Cursor::new(response_data);
+
+        let result = client.read_response(&mut cursor, Instant::now(), Duration::from_secs(1))
+            .expect("Failed to read response");
+
+        assert_eq!(result, response_data.as_bytes());
     }
 }

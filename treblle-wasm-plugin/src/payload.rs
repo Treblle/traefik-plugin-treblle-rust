@@ -117,6 +117,7 @@ mod tests {
             sensitive_keys_regex: DEFAULT_SENSITIVE_KEYS_REGEX.to_string(),
             buffer_response: false,
             log_level: LogLevel::None,
+            root_ca_path: None,
         }
     }
 
