@@ -24,6 +24,10 @@ pub enum TreblleError {
     /// Represents configuration-related errors.
     #[error("Configuration error: {0}")]
     Config(String),
+
+    /// Represents runtime related errors.
+    #[error("Runtime error: {0}")]
+    Runtime(String),
 }
 
 /// A specialized Result type for Treblle operations.
