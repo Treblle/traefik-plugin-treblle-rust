@@ -69,7 +69,7 @@ pub fn load_root_certs(root_store: &mut RootCertStore) -> Result<()> {
 fn load_custom_certificates(root_store: &mut RootCertStore, ca_path: &str) -> Result<()> {
     let file = File::open(ca_path).map_err(|e| {
         log(LogLevel::Error, &format!("Failed to open custom root CA file: {}", e));
-        TreblleError::CertificateError(format!("Failed to open custom root CA file: {}", e))
+        TreblleError::Certificate(format!("Failed to open custom root CA file: {}", e))
     })?;
 
     let mut reader = BufReader::new(file);
@@ -77,18 +77,18 @@ fn load_custom_certificates(root_store: &mut RootCertStore, ca_path: &str) -> Re
         .collect::<std::result::Result<Vec<_>, _>>()
         .map_err(|e| {
             log(LogLevel::Error, &format!("Failed to parse custom root CA file: {}", e));
-            TreblleError::CertificateError(format!("Failed to parse custom root CA file: {}", e))
+            TreblleError::Certificate(format!("Failed to parse custom root CA file: {}", e))
         })?;
 
     if certs.is_empty() {
         log(LogLevel::Error, "No certificates found in the custom root CA file");
-        return Err(TreblleError::CertificateError("No certificates found in the custom root CA file".to_string()));
+        return Err(TreblleError::Certificate("No certificates found in the custom root CA file".to_string()));
     }
 
     for cert in certs {
         root_store.add(&rustls::Certificate(cert.to_vec())).map_err(|e| {
             log(LogLevel::Error, &format!("Failed to add custom root CA to store: {}", e));
-            TreblleError::CertificateError(format!("Failed to add custom root CA to store: {}", e))
+            TreblleError::Certificate(format!("Failed to add custom root CA to store: {}", e))
         })?;
     }
 

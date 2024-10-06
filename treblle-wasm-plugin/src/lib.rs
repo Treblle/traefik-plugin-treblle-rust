@@ -38,8 +38,10 @@ pub static BLACKLIST: Lazy<RouteBlacklist> =
     Lazy::new(|| RouteBlacklist::new(&CONFIG.route_blacklist));
 
 #[cfg(feature = "wasm")]
-pub static HTTP_CLIENT: Lazy<WasiHttpClient> =
-    Lazy::new(|| WasiHttpClient::new(CONFIG.treblle_api_urls.clone()));
+pub static HTTP_CLIENT: Lazy<WasiHttpClient> = Lazy::new(|| {
+    WasiHttpClient::new(CONFIG.treblle_api_urls.clone())
+        .expect("Failed to initialize WasiHttpClient")
+});
 
 #[cfg(feature = "wasm")]
 impl Guest for HttpHandler {
@@ -53,10 +55,7 @@ impl Guest for HttpHandler {
     fn handle_request() -> i64 {
         logger::init();
 
-        /*match certs::load_root_certificate() {
-            Ok(cert) => log(LogLevel::Info, &format!("Root certificate loaded, length: {}", cert.len())),
-            Err(e) => log(LogLevel::Error, &format!("Failed to load root certificate: {}", e)),
-        }*/
+        Lazy::force(&HTTP_CLIENT);
         
         log(LogLevel::Debug, "Initializing request handler!");
         log(LogLevel::Info, "Handling request in WASM module");

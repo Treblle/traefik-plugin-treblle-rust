@@ -26,20 +26,24 @@ pub enum TreblleError {
     InvalidUrl(String),
 
     /// Represents errors when a hostname is invalid for TLS.
-    #[error("Invalid hostname")]
-    InvalidHostname,
+    #[error("Invalid hostname: {0}")]
+    InvalidHostname(String),
 
     /// Represents TLS-related errors.
     #[error("TLS error: {0}")]
-    TlsError(#[from] rustls::Error),
+    Tls(#[from] rustls::Error),
+
+    /// Represents TCP-related errors.
+    #[error("TCP error: {0}")]
+    Tcp(String),
 
     /// Represents errors related to certificate handling.
     #[error("Certificate error: {0}")]
-    CertificateError(String),
+    Certificate(String),
 
     /// Represents timeout errors.
     #[error("Operation timed out")]
-    TimeoutError,
+    Timeout,
 
     /// Represents configuration-related errors.
     #[error("Config error: {0}")]
@@ -52,6 +56,7 @@ pub enum TreblleError {
     /// Represents errors that occur when interacting with host functions.
     #[error("Host function error: {0}")]
     HostFunction(String),
+
 }
 
 
