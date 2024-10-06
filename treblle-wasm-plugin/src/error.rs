@@ -1,17 +1,49 @@
 //! Error types for the Treblle middleware.
 
+use std::fmt;
+use std::fmt::write;
+use std::io;
+
 use thiserror::Error;
 
 /// Represents errors that can occur in the Treblle middleware.
 #[derive(Error, Debug)]
 pub enum TreblleError {
+    /// Represents I/O errors.
+    #[error("I/O error: {0}")]
+    Io(#[from] io::Error),
+
     /// Represents HTTP-related errors.
     #[error("HTTP error: {0}")]
     Http(String),
 
-    /// Represents errors that occur during JSON serialization or deserialization.
+    /// Represents JSON parsing or serialization errors.
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
+
+    /// Represents errors related to invalid URLs.
+    #[error("Invalid URL: {0}")]
+    InvalidUrl(String),
+
+    /// Represents errors when a hostname is invalid for TLS.
+    #[error("Invalid hostname")]
+    InvalidHostname,
+
+    /// Represents TLS-related errors.
+    #[error("TLS error: {0}")]
+    TlsError(#[from] rustls::Error),
+
+    /// Represents errors related to certificate handling.
+    #[error("Certificate error: {0}")]
+    CertificateError(String),
+
+    /// Represents timeout errors.
+    #[error("Operation timed out")]
+    TimeoutError,
+
+    /// Represents configuration-related errors.
+    #[error("Config error: {0}")]
+    Config(String),
 
     /// Represents errors related to regular expressions.
     #[error("Regex error: {0}")]
@@ -20,17 +52,10 @@ pub enum TreblleError {
     /// Represents errors that occur when interacting with host functions.
     #[error("Host function error: {0}")]
     HostFunction(String),
-
-    /// Represents configuration-related errors.
-    #[error("Configuration error: {0}")]
-    Config(String),
-
-    /// Represents runtime related errors.
-    #[error("Runtime error: {0}")]
-    Runtime(String),
 }
 
-/// A specialized Result type for Treblle operations.
+
+/// A `Result` type alias for operations that can result in a `TreblleError`.
 pub type Result<T> = std::result::Result<T, TreblleError>;
 
 #[cfg(test)]

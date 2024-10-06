@@ -27,9 +27,9 @@ experimental:
   localPlugins:
     treblle:
       moduleName: github.com/momo-gg/treblle-wasm-plugin
-      settings:
-        mounts:
-          - /etc/certs:/etc/certs
+      # settings:
+      # mounts:
+      # - /etc/certs:/etc/certs
 
 log:
   level: DEBUG

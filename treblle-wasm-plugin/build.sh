@@ -10,6 +10,8 @@ PLUGIN_DIR="../plugins-local/src/github.com/momo-gg/treblle-wasm-plugin"
 rustup target add "$TARGET"
 
 # Build the WASM plugin
+export CC="/opt/homebrew/opt/llvm/bin/clang"
+export TARGET_CC="/opt/homebrew/opt/llvm/bin/clang"
 cargo build --target "$TARGET" --release --features wasm
 
 # Remove the existing plugin directory if it exists

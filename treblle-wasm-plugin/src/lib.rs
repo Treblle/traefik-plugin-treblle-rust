@@ -21,6 +21,7 @@ mod payload;
 mod route_blacklist;
 mod schema;
 mod utils;
+mod wasi_http_client;
 
 use once_cell::sync::Lazy;
 
@@ -32,14 +33,15 @@ use http_client::HttpClient;
 use http_handler::HttpHandler;
 use logger::{log, LogLevel};
 use route_blacklist::RouteBlacklist;
+use crate::wasi_http_client::WasiHttpClient;
 
 pub static CONFIG: Lazy<Config> = Lazy::new(Config::get_or_fallback);
 pub static BLACKLIST: Lazy<RouteBlacklist> =
     Lazy::new(|| RouteBlacklist::new(&CONFIG.route_blacklist));
 
 #[cfg(feature = "wasm")]
-pub static HTTP_CLIENT: Lazy<HttpClient> =
-    Lazy::new(|| HttpClient::new(CONFIG.treblle_api_urls.clone()));
+pub static HTTP_CLIENT: Lazy<WasiHttpClient> =
+    Lazy::new(|| WasiHttpClient::new(CONFIG.treblle_api_urls.clone()));
 
 #[cfg(feature = "wasm")]
 impl Guest for HttpHandler {
@@ -53,12 +55,12 @@ impl Guest for HttpHandler {
     fn handle_request() -> i64 {
         logger::init();
 
-        match certs::load_root_certificate() {
+        /*match certs::load_root_certificate() {
             Ok(cert) => log(LogLevel::Info, &format!("Root certificate loaded, length: {}", cert.len())),
             Err(e) => log(LogLevel::Error, &format!("Failed to load root certificate: {}", e)),
-        }
+        }*/
         
-        log(LogLevel::Debug, "Initializing request handler");
+        log(LogLevel::Debug, "Initializing request handler!");
         log(LogLevel::Info, "Handling request in WASM module");
 
         log(
