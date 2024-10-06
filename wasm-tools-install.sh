@@ -1,12 +1,12 @@
 #!/bin/sh
 
-# Check if the wabt directory exists and remove it if necessary
+set -e # Exit immediately if a command exits with a non-zero status.
+
 if [ -d "wabt" ]; then
     echo "Removing existing wabt directory..."
     rm -rf wabt
 fi
 
-# Clone the wabt repository
 git clone --recursive https://github.com/WebAssembly/wabt
 
 cd wabt || exit
@@ -26,7 +26,6 @@ make clang-debug-lsan
 
 chmod +x bin/
 
-# Use sudo to copy files to /usr/local/bin/
 sudo cp bin/* /usr/local/bin/
 
 # Verify that wasm-objdump is available

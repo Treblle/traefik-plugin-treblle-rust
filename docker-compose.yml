@@ -1,69 +1,93 @@
 services:
   traefik:
     image: traefik:v3.1
-    command:
-      - "--api.insecure=true"
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--entrypoints.web.address=:80"
-      - "--experimental.localPlugins.treblle.moduleName=github.com/momo-gg/rust-http-wasm"
-      - "--log.level=DEBUG"
-      - "--accesslog=true"
-      - "--accesslog.filepath=/var/log/traefik/access.log"
-      - "--metrics.prometheus=true"
-      - "--metrics.prometheus.buckets=0.1,0.3,1.2,5.0"
     ports:
       - "80:80"
+      - "443:443"
       - "8080:8080"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./traefik.yml:/etc/traefik/traefik.yml:ro
-      - ./traefik_dynamic.yml:/etc/traefik/traefik_dynamic.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./traefik_static.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik_dynamic.yml:/etc/traefik/dynamic.yml:ro
+      - ./certs/:/etc/certs:ro
       - ./plugins-local:/plugins-local:ro
       - ./logs:/var/log/traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik.rule=Host(`traefik.localhost.gg`)"
+      - "traefik.http.routers.traefik.entrypoints=https"
+      - "traefik.http.routers.traefik.tls=true"
+      - "traefik.http.routers.traefik.service=traefik@docker"
+      - "traefik.http.services.traefik.loadbalancer.server.port=8080"
     networks:
       - treblle-network
 
   producer:
     build:
       context: ./producer
-      dockerfile: Dockerfile
       args:
         - RUST_VERSION=${RUST_VERSION}
     environment:
-      - CONSUMER_URL=http://traefik
+      - CONSUMER_URL=http://consumer:3000
       - INTERVAL_DURATION=5
-    depends_on:
-      - traefik
-      - consumer
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.producer.rule=Host(`producer.localhost.gg`)"
+      - "traefik.http.routers.producer.entrypoints=https"
+      - "traefik.http.routers.producer.tls=true"
+      - "traefik.http.routers.producer.service=producer@docker"
+      - "traefik.http.services.producer.loadbalancer.server.port=3000"
     networks:
       - treblle-network
+    profiles:
+      - local_treblle_api
 
   consumer:
     build:
       context: ./consumer
-      dockerfile: Dockerfile
       args:
         - RUST_VERSION=${RUST_VERSION}
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.consumer.rule=PathPrefix(`/`)"
-      - "traefik.http.services.consumer.loadbalancer.server.port=3000"
+      - "traefik.http.routers.consumer.rule=Host(`consumer.localhost.gg`)"
+      - "traefik.http.routers.consumer.entrypoints=https"
+      - "traefik.http.routers.consumer.tls=true"
+      - "traefik.http.routers.consumer.service=consumer@docker"
       - "traefik.http.routers.consumer.middlewares=treblle-middleware@file"
+      - "traefik.http.services.consumer.loadbalancer.server.port=3000"
     networks:
       - treblle-network
 
   treblle-api:
     build:
       context: ./treblle-api
-      dockerfile: Dockerfile
       args:
         - RUST_VERSION=${RUST_VERSION}
-    ports:
-      - "3002:3002"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.treblle-api.rule=Host(`treblle-api.localhost.gg`)"
+      - "traefik.http.routers.treblle-api.entrypoints=https"
+      - "traefik.http.routers.treblle-api.tls=true"
+      - "traefik.http.routers.treblle-api.service=treblle-api@docker"
+      - "traefik.http.services.treblle-api.loadbalancer.server.port=3000"
+    networks:
+      - treblle-network
+    profiles:
+      - local_treblle_api
+
+  mkcert:
+    environment:
+      - domain=*.localhost.gg
+    container_name: mkcert
+    platform: linux/amd64
+    volumes:
+        - ./certs/:/root/.local/share/mkcert
+    image: vishnunair/docker-mkcert
+    labels:
+      - "traefik.enable=false"
     networks:
       - treblle-network
 
 networks:
   treblle-network:
-    name: treblle-network
+    external: true

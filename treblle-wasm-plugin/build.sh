@@ -1,14 +1,18 @@
 #!/bin/sh
 set -e
 
-# Define the plugin directory
-PLUGIN_DIR="../plugins-local/src/github.com/momo-gg/rust-http-wasm"
+# Default target
+TARGET=${TARGET:-wasm32-wasip1}
 
+# Define the plugin directory
+PLUGIN_DIR="../plugins-local/src/github.com/momo-gg/treblle-wasm-plugin"
 # Ensure the target is installed
-rustup target add wasm32-wasip1
+rustup target add "$TARGET"
 
 # Build the WASM plugin
-cargo build --target wasm32-wasip1 --release
+export CC="/opt/homebrew/opt/llvm/bin/clang"
+export TARGET_CC="/opt/homebrew/opt/llvm/bin/clang"
+cargo build --target "$TARGET" --release --features wasm
 
 # Remove the existing plugin directory if it exists
 if [ -d "$PLUGIN_DIR" ]; then
@@ -22,7 +26,7 @@ mkdir -p "$PLUGIN_DIR"
 
 # Copy the compiled WASM file
 echo "Copying WASM plugin..."
-cp target/wasm32-wasip1/release/rust_http_wasm.wasm "$PLUGIN_DIR/plugin.wasm"
+cp target/"$TARGET"/release/treblle_wasm_plugin.wasm "$PLUGIN_DIR/plugin.wasm"
 
 # Copy the .traefik.yml file
 echo "Copying .traefik.yml..."

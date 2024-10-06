@@ -1,6 +1,8 @@
 #!/bin/sh
 
-WASM_MODULE="plugins-local/src/github.com/momo-gg/rust-http-wasm/plugin.wasm"
+set -e # Exit immediately if a command exits with a non-zero status.
+
+WASM_MODULE="plugins-local/src/github.com/momo-gg/treblle-wasm-plugin/plugin.wasm"
 
 # ANSI color codes
 GREEN='\033[0;32m'
@@ -28,14 +30,13 @@ check_file_size() {
             printf "${GREEN}[INFO] The WASM module size is %s KB.${NC}\n" "$file_size_kb"
         fi
     else
+        # shellcheck disable=SC2059
         printf "${RED}[ERROR] The WASM module file does not exist.${NC}\n"
         exit 1
     fi
 }
 
-# Check if the WASM module exports functions required by Traefik
 check_export 'handle_request'
 check_export 'handle_response'
 
-# Check the size of the generated WASM file
 check_file_size

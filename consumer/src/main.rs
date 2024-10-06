@@ -1,16 +1,22 @@
 use axum::{
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
-    routing::post,
+    routing::{get, post},
     Router,
 };
+
+// Add this function to your existing code
+async fn healthcheck() -> &'static str {
+    "OK"
+}
 
 #[tokio::main]
 async fn main() {
     let app = Router::new()
         .route("/consume", post(consume_request))
         .route("/blacklisted-example", post(blacklisted_example))
-        .route("/sensitive-data", post(sensitive_data));
+        .route("/sensitive-data", post(sensitive_data))
+        .route("/health", get(healthcheck));
 
     let addr = "0.0.0.0:3000";
     println!("Consumer service listening on {}", addr);
