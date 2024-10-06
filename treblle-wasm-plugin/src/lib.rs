@@ -22,6 +22,7 @@ mod schema;
 mod utils;
 mod wasi_http_client;
 
+use std::sync::Mutex;
 use once_cell::sync::Lazy;
 
 #[cfg(feature = "wasm")]
@@ -38,9 +39,11 @@ pub static BLACKLIST: Lazy<RouteBlacklist> =
     Lazy::new(|| RouteBlacklist::new(&CONFIG.route_blacklist));
 
 #[cfg(feature = "wasm")]
-pub static HTTP_CLIENT: Lazy<WasiHttpClient> = Lazy::new(|| {
-    WasiHttpClient::new(CONFIG.treblle_api_urls.clone())
-        .expect("Failed to initialize WasiHttpClient")
+pub static HTTP_CLIENT: Lazy<Mutex<WasiHttpClient>> = Lazy::new(|| {
+    Mutex::new(
+        WasiHttpClient::new(CONFIG.treblle_api_urls.clone())
+            .expect("Failed to initialize WasiHttpClient")
+    )
 });
 
 #[cfg(feature = "wasm")]

@@ -5,6 +5,7 @@
 
 use std::collections::HashMap;
 use std::time::Instant;
+use std::sync::MutexGuard;
 
 #[cfg(feature = "wasm")]
 use crate::host_functions::*;
@@ -239,8 +240,15 @@ impl HttpHandler {
             &format!("Payload JSON length: {}", payload_json.len()),
         );
 
-        HTTP_CLIENT
-            .post(payload_json.as_bytes(), &CONFIG.api_key)
+        let mut http_client = HTTP_CLIENT.lock().map_err(|e| {
+            log(
+                LogLevel::Error,
+                &format!("Failed to acquire HTTP_CLIENT lock: {}", e),
+            );
+            TreblleError::LockError(e.to_string())
+        })?;
+
+        http_client.post(payload_json.as_bytes(), &CONFIG.api_key)
             .map_err(|e| {
                 log(
                     LogLevel::Error,

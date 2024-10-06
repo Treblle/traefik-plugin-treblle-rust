@@ -57,6 +57,10 @@ pub enum TreblleError {
     #[error("Host function error: {0}")]
     HostFunction(String),
 
+    /// Represents errors that occur when acquiring a lock.
+    #[error("Lock acquisition error: {0}")]
+    LockError(String),
+
 }
 
 
