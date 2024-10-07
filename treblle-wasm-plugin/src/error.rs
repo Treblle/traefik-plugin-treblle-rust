@@ -1,9 +1,6 @@
 //! Error types for the Treblle middleware.
 
-use std::fmt;
-use std::fmt::write;
 use std::io;
-
 use thiserror::Error;
 
 /// Represents errors that can occur in the Treblle middleware.
@@ -60,9 +57,7 @@ pub enum TreblleError {
     /// Represents errors that occur when acquiring a lock.
     #[error("Lock acquisition error: {0}")]
     LockError(String),
-
 }
-
 
 /// A `Result` type alias for operations that can result in a `TreblleError`.
 pub type Result<T> = std::result::Result<T, TreblleError>;

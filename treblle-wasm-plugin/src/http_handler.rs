@@ -5,13 +5,6 @@
 
 use std::collections::HashMap;
 use std::time::Instant;
-use std::sync::MutexGuard;
-
-#[cfg(feature = "wasm")]
-use crate::host_functions::*;
-
-#[cfg(feature = "wasm")]
-use crate::{HTTP_CLIENT};
 
 use crate::constants::{HEADER_CONTENT_TYPE, REQUEST_KIND, RESPONSE_KIND};
 use crate::error::{Result, TreblleError};
@@ -19,6 +12,12 @@ use crate::logger::{log, LogLevel};
 use crate::payload::Payload;
 use crate::schema::ErrorInfo;
 use crate::{BLACKLIST, CONFIG};
+
+#[cfg(feature = "wasm")]
+use crate::host_functions::*;
+
+#[cfg(feature = "wasm")]
+use crate::HTTP_CLIENT;
 
 /// The main handler for HTTP requests and responses
 pub struct HttpHandler;
@@ -81,10 +80,7 @@ impl HttpHandler {
     #[cfg(feature = "wasm")]
     pub fn process_response(&self, _req_ctx: i32, is_error: i32) -> Result<()> {
         if !CONFIG.buffer_response {
-            log(
-                LogLevel::Info,
-                "Not processing response, buffer_response is not enabled",
-            );
+            log(LogLevel::Info, "Not processing response, buffer_response is not enabled");
             return Ok(());
         }
 
@@ -125,10 +121,7 @@ impl HttpHandler {
     #[cfg(feature = "wasm")]
     fn get_content_type(&self) -> Result<String> {
         host_get_header_values(REQUEST_KIND, HEADER_CONTENT_TYPE).map_err(|e| {
-            log(
-                LogLevel::Error,
-                &format!("Failed to get Content-Type: {}", e),
-            );
+            log(LogLevel::Error, &format!("Failed to get Content-Type: {}", e));
             TreblleError::HostFunction(e.to_string())
         })
     }
@@ -136,10 +129,7 @@ impl HttpHandler {
     #[cfg(feature = "wasm")]
     fn get_method(&self) -> Result<String> {
         host_get_method().map_err(|e| {
-            log(
-                LogLevel::Error,
-                &format!("Failed to get HTTP method: {}", e),
-            );
+            log(LogLevel::Error, &format!("Failed to get HTTP method: {}", e));
             TreblleError::HostFunction(e.to_string())
         })
     }
@@ -149,10 +139,7 @@ impl HttpHandler {
         log(LogLevel::Debug, "Starting get_headers");
 
         let header_names = host_get_header_names(header_kind).map_err(|e| {
-            log(
-                LogLevel::Error,
-                &format!("Failed to get header names: {}", e),
-            );
+            log(LogLevel::Error, &format!("Failed to get header names: {}", e));
             TreblleError::HostFunction(e.to_string())
         })?;
 
@@ -164,10 +151,7 @@ impl HttpHandler {
             }
         }
 
-        log(
-            LogLevel::Debug,
-            &format!("Total headers processed: {}", headers.len()),
-        );
+        log(LogLevel::Debug, &format!("Total headers processed: {}", headers.len()));
 
         Ok(headers)
     }
@@ -208,10 +192,7 @@ impl HttpHandler {
     #[cfg(feature = "wasm")]
     fn update_payload_server_info(&self, payload: &mut Payload) -> Result<()> {
         let protocol = host_get_protocol_version().map_err(|e| {
-            log(
-                LogLevel::Error,
-                &format!("Failed to get protocol version: {}", e),
-            );
+            log(LogLevel::Error, &format!("Failed to get protocol version: {}", e));
             TreblleError::HostFunction(e.to_string())
         })?;
 
@@ -235,27 +216,17 @@ impl HttpHandler {
         log(LogLevel::Debug, "Preparing to send data to Treblle API");
 
         let payload_json = payload.to_json()?;
-        log(
-            LogLevel::Debug,
-            &format!("Payload JSON length: {}", payload_json.len()),
-        );
+        log(LogLevel::Debug, &format!("Payload JSON length: {}", payload_json.len()));
 
-        let mut http_client = HTTP_CLIENT.lock().map_err(|e| {
-            log(
-                LogLevel::Error,
-                &format!("Failed to acquire HTTP_CLIENT lock: {}", e),
-            );
+        let http_client = HTTP_CLIENT.lock().map_err(|e| {
+            log(LogLevel::Error, &format!("Failed to acquire HTTP_CLIENT lock: {}", e));
             TreblleError::LockError(e.to_string())
         })?;
 
-        http_client.post(payload_json.as_bytes(), &CONFIG.api_key)
-            .map_err(|e| {
-                log(
-                    LogLevel::Error,
-                    &format!("Failed to send data to Treblle API: {}", e),
-                );
-                TreblleError::Http(format!("Failed to send data to Treblle API: {}", e))
-            })?;
+        http_client.post(payload_json.as_bytes(), &CONFIG.api_key).map_err(|e| {
+            log(LogLevel::Error, &format!("Failed to send data to Treblle API: {}", e));
+            TreblleError::Http(format!("Failed to send data to Treblle API: {}", e))
+        })?;
 
         log(
             LogLevel::Debug,
@@ -272,8 +243,6 @@ impl HttpHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::Config;
-    use crate::route_blacklist::RouteBlacklist;
 
     #[test]
     fn test_create_error_info() {

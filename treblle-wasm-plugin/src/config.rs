@@ -5,9 +5,9 @@
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::logger::{log, LogLevel};
 use crate::constants::{DEFAULT_SENSITIVE_KEYS_REGEX, DEFAULT_TREBLLE_API_URLS};
 use crate::error::{Result, TreblleError};
+use crate::logger::{log, LogLevel};
 
 #[cfg(feature = "wasm")]
 use crate::host_functions::host_get_config;
@@ -39,18 +39,12 @@ impl Config {
                 }
             }
             Err(e) => {
-                log(
-                    LogLevel::Error,
-                    &format!("Failed to parse config: {}, using fallback", e),
-                );
+                log(LogLevel::Error, &format!("Failed to parse config: {}, using fallback", e));
 
                 let fallback = Self::fallback();
 
                 if let Err(e) = fallback.validate() {
-                    log(
-                        LogLevel::Error,
-                        &format!("Fallback configuration is invalid: {}", e),
-                    );
+                    log(LogLevel::Error, &format!("Fallback configuration is invalid: {}", e));
                 }
 
                 fallback
@@ -64,10 +58,7 @@ impl Config {
         let raw_config = host_get_config()?;
         let value: Value = serde_json::from_str(&raw_config).map_err(|e| TreblleError::Json(e))?;
 
-        log(
-            LogLevel::Debug,
-            &format!("Received config from host: {}", value),
-        );
+        log(LogLevel::Debug, &format!("Received config from host: {}", value));
 
         Ok(Self::from_value(value))
     }
@@ -88,16 +79,9 @@ impl Config {
             treblle_api_urls: value
                 .get("treblleApiUrls")
                 .and_then(|v| v.as_array())
-                .map(|a| {
-                    a.iter()
-                        .filter_map(|v| v.as_str().map(String::from))
-                        .collect()
-                })
+                .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
                 .unwrap_or_else(|| {
-                    DEFAULT_TREBLLE_API_URLS
-                        .iter()
-                        .map(|&s| s.to_string())
-                        .collect()
+                    DEFAULT_TREBLLE_API_URLS.iter().map(|&s| s.to_string()).collect()
                 }),
 
             api_key: value
@@ -115,11 +99,7 @@ impl Config {
             route_blacklist: value
                 .get("routeBlacklist")
                 .and_then(|v| v.as_array())
-                .map(|a| {
-                    a.iter()
-                        .filter_map(|v| v.as_str().map(String::from))
-                        .collect()
-                })
+                .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
                 .unwrap_or_default(),
 
             sensitive_keys_regex: value
@@ -131,8 +111,7 @@ impl Config {
             buffer_response: value
                 .get("bufferResponse")
                 .and_then(|v| {
-                    v.as_bool()
-                        .or_else(|| v.as_str().map(|s| s.to_lowercase() == "true"))
+                    v.as_bool().or_else(|| v.as_str().map(|s| s.to_lowercase() == "true"))
                 })
                 .unwrap_or(false),
 
@@ -142,20 +121,14 @@ impl Config {
                 .map(LogLevel::from_str)
                 .unwrap_or_default(),
 
-            root_ca_path: value
-                .get("rootCaPath")
-                .and_then(|v| v.as_str())
-                .map(String::from),
+            root_ca_path: value.get("rootCaPath").and_then(|v| v.as_str()).map(String::from),
         }
     }
 
     /// Returns a default configuration.
     fn fallback() -> Self {
         Config {
-            treblle_api_urls: DEFAULT_TREBLLE_API_URLS
-                .iter()
-                .map(|&s| s.to_string())
-                .collect(),
+            treblle_api_urls: DEFAULT_TREBLLE_API_URLS.iter().map(|&s| s.to_string()).collect(),
             api_key: String::new(),
             project_id: String::new(),
             route_blacklist: Vec::new(),
@@ -219,10 +192,7 @@ mod tests {
 
         assert_eq!(
             config.treblle_api_urls,
-            DEFAULT_TREBLLE_API_URLS
-                .iter()
-                .map(|&s| s.to_string())
-                .collect::<Vec<String>>()
+            DEFAULT_TREBLLE_API_URLS.iter().map(|&s| s.to_string()).collect::<Vec<String>>()
         );
         assert!(config.api_key.is_empty());
         assert!(config.project_id.is_empty());
@@ -277,11 +247,7 @@ mod tests {
             let value = json!({ "logLevel": input });
             let config = Config::from_value(value);
 
-            assert!(
-                matches!(config.log_level, _expected),
-                "Failed for input: {}",
-                input
-            );
+            assert!(matches!(config.log_level, _expected), "Failed for input: {}", input);
         }
     }
 

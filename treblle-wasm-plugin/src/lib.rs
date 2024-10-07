@@ -22,17 +22,17 @@ mod schema;
 mod utils;
 mod wasi_http_client;
 
-use std::sync::Mutex;
 use once_cell::sync::Lazy;
+use std::sync::Mutex;
 
 #[cfg(feature = "wasm")]
 use bindings::exports::traefik::http_handler::handler::Guest;
 
+use crate::wasi_http_client::WasiHttpClient;
 use config::Config;
 use http_handler::HttpHandler;
 use logger::{log, LogLevel};
 use route_blacklist::RouteBlacklist;
-use crate::wasi_http_client::WasiHttpClient;
 
 pub static CONFIG: Lazy<Config> = Lazy::new(Config::get_or_fallback);
 pub static BLACKLIST: Lazy<RouteBlacklist> =
@@ -42,7 +42,7 @@ pub static BLACKLIST: Lazy<RouteBlacklist> =
 pub static HTTP_CLIENT: Lazy<Mutex<WasiHttpClient>> = Lazy::new(|| {
     Mutex::new(
         WasiHttpClient::new(CONFIG.treblle_api_urls.clone())
-            .expect("Failed to initialize WasiHttpClient")
+            .expect("Failed to initialize WasiHttpClient"),
     )
 });
 
@@ -59,7 +59,7 @@ impl Guest for HttpHandler {
         logger::init();
 
         Lazy::force(&HTTP_CLIENT);
-        
+
         log(LogLevel::Debug, "Handling request in WASM module");
 
         if CONFIG.buffer_response {
@@ -89,14 +89,11 @@ impl Guest for HttpHandler {
     /// * `is_error` - Indicates if the response is an error
     fn handle_response(req_ctx: i32, is_error: i32) {
         logger::init();
-        
+
         log(LogLevel::Debug, "Handling response in WASM module");
 
         if let Err(e) = HttpHandler.process_response(req_ctx, is_error) {
-            log(
-                LogLevel::Error,
-                &format!("Error processing response: {}", e),
-            );
+            log(LogLevel::Error, &format!("Error processing response: {}", e));
         }
 
         log(LogLevel::Debug, "Finished processing response");

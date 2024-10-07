@@ -4,23 +4,22 @@
 //! WebAssembly System Interface (WASI) environments. Minimalistic, custom-built for this middleware.
 //! It supports connection pooling, TLS connections, and non-blocking I/O operations.
 
+use std::collections::VecDeque;
 use std::io::{self, Write};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::{Duration, Instant};
-use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
-#[cfg(feature = "wasm")]
-use wasmedge_wasi_socket::{TcpStream, Shutdown};
-
+use lazy_static::lazy_static;
 use rustls::{ClientConfig, ClientConnection, RootCertStore, ServerName, StreamOwned};
 use url::Url;
-use lazy_static::lazy_static;
 
+#[cfg(feature = "wasm")]
+use wasmedge_wasi_socket::TcpStream;
+
+use crate::certs::load_root_certs;
 use crate::error::{Result, TreblleError};
 use crate::logger::{log, LogLevel};
-use crate::certs::load_root_certs;
-use crate::CONFIG;
 
 /// Timeout duration for connection attempts
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -72,7 +71,8 @@ impl WasiHttpClient {
 
     /// Gets the next URL from the list of Treblle API URLs
     fn get_next_url(&self) -> String {
-        let index = self.current_url_index.fetch_add(1, Ordering::SeqCst) % self.treblle_api_urls.len();
+        let index =
+            self.current_url_index.fetch_add(1, Ordering::SeqCst) % self.treblle_api_urls.len();
         self.treblle_api_urls[index].clone()
     }
 
@@ -90,8 +90,15 @@ impl WasiHttpClient {
     pub fn post(&self, payload: &[u8], api_key: &str) -> Result<()> {
         let url = self.get_next_url();
         let parsed_url = Url::parse(&url).map_err(|e| TreblleError::InvalidUrl(e.to_string()))?;
-        let host = parsed_url.host_str().ok_or_else(|| TreblleError::InvalidUrl("No host in URL".to_string()))?;
-        let port = parsed_url.port_or_known_default().ok_or_else(|| TreblleError::InvalidUrl("Invalid port".to_string()))?;
+        
+        let host = parsed_url
+            .host_str()
+            .ok_or_else(|| TreblleError::InvalidUrl("No host in URL".to_string()))?;
+        
+        let port = parsed_url
+            .port_or_known_default()
+            .ok_or_else(|| TreblleError::InvalidUrl("Invalid port".to_string()))?;
+        
         let path = parsed_url.path();
 
         let mut stream = self.get_connection(host, port)?;
@@ -119,7 +126,8 @@ impl WasiHttpClient {
     /// A `Result` containing a `TlsStream` or an error
     #[cfg(feature = "wasm")]
     fn get_connection(&self, host: &str, port: u16) -> Result<TlsStream> {
-        let mut pool = self.connection_pool.lock().map_err(|e| TreblleError::LockError(e.to_string()))?;
+        let mut pool =
+            self.connection_pool.lock().map_err(|e| TreblleError::LockError(e.to_string()))?;
 
         // Remove expired connections
         pool.retain(|conn| conn.last_used.elapsed() < CONNECTION_TIMEOUT);
@@ -135,8 +143,10 @@ impl WasiHttpClient {
 
         let server_name = ServerName::try_from(host)
             .map_err(|_| TreblleError::InvalidHostname(host.to_string()))?;
+        
         let client = ClientConnection::new(self.get_client_config()?, server_name)
             .map_err(TreblleError::Tls)?;
+        
         Ok(StreamOwned::new(client, stream))
     }
 
@@ -156,10 +166,7 @@ impl WasiHttpClient {
         };
 
         if pool.len() < MAX_POOL_SIZE {
-            pool.push_back(PooledConnection {
-                stream,
-                last_used: Instant::now(),
-            });
+            pool.push_back(PooledConnection { stream, last_used: Instant::now() });
         }
     }
 
@@ -184,7 +191,10 @@ impl WasiHttpClient {
              Content-Length: {}\r\n\
              Connection: keep-alive\r\n\
              \r\n",
-            path, host, api_key, payload.len()
+            path,
+            host,
+            api_key,
+            payload.len()
         )
     }
 
@@ -209,7 +219,9 @@ impl WasiHttpClient {
                     if start.elapsed() > CONNECT_TIMEOUT {
                         return Err(TreblleError::Timeout);
                     }
+                    
                     std::thread::sleep(Duration::from_millis(1));
+                    
                     continue;
                 }
                 Err(e) => return Err(TreblleError::Io(e)),
@@ -242,7 +254,8 @@ impl WasiHttpClient {
     ///
     /// A `Result` containing an `Arc<ClientConfig>` or an error
     fn get_client_config(&self) -> Result<Arc<ClientConfig>> {
-        let mut config_guard = CLIENT_CONFIG.lock().map_err(|e| TreblleError::LockError(e.to_string()))?;
+        let mut config_guard =
+            CLIENT_CONFIG.lock().map_err(|e| TreblleError::LockError(e.to_string()))?;
 
         if let Some(config) = config_guard.as_ref() {
             return Ok(config.clone());
@@ -250,7 +263,9 @@ impl WasiHttpClient {
 
         log(LogLevel::Info, "Initializing TLS client configuration");
         let new_config = Arc::new(Self::create_tls_config()?);
+        
         *config_guard = Some(new_config.clone());
+        
         Ok(new_config)
     }
 }
@@ -264,7 +279,8 @@ mod tests {
         let client = WasiHttpClient::new(vec![
             "https://api1.treblle.com".to_string(),
             "https://api2.treblle.com".to_string(),
-        ]).unwrap();
+        ])
+        .unwrap();
 
         assert_eq!(client.get_next_url(), "https://api1.treblle.com");
         assert_eq!(client.get_next_url(), "https://api2.treblle.com");

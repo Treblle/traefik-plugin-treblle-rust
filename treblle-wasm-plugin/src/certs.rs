@@ -7,6 +7,7 @@
 use rustls::{OwnedTrustAnchor, RootCertStore};
 use std::fs::File;
 use std::io::BufReader;
+
 use crate::error::{Result, TreblleError};
 use crate::logger::{log, LogLevel};
 use crate::CONFIG;
@@ -39,7 +40,10 @@ pub fn load_root_certs(root_store: &mut RootCertStore) -> Result<()> {
                 return Ok(());
             }
             Err(e) => {
-                log(LogLevel::Error, &format!("Failed to load custom root CA: {}. Falling back to webpki-roots.", e));
+                log(
+                    LogLevel::Error,
+                    &format!("Failed to load custom root CA: {}. Falling back to webpki-roots.", e),
+                );
             }
         }
     }
@@ -82,7 +86,9 @@ fn load_custom_certificates(root_store: &mut RootCertStore, ca_path: &str) -> Re
 
     if certs.is_empty() {
         log(LogLevel::Error, "No certificates found in the custom root CA file");
-        return Err(TreblleError::Certificate("No certificates found in the custom root CA file".to_string()));
+        return Err(TreblleError::Certificate(
+            "No certificates found in the custom root CA file".to_string(),
+        ));
     }
 
     for cert in certs {

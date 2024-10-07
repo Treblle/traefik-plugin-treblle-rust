@@ -116,10 +116,7 @@ pub fn mask_sensitive_data(data: &Value, sensitive_keys_regex: &str) -> Result<V
                 if re.is_match(key) {
                     new_map.insert(key.clone(), Value::String("*****".to_string()));
                 } else {
-                    new_map.insert(
-                        key.clone(),
-                        mask_sensitive_data(value, sensitive_keys_regex)?,
-                    );
+                    new_map.insert(key.clone(), mask_sensitive_data(value, sensitive_keys_regex)?);
                 }
             }
             Value::Object(new_map)
@@ -214,11 +211,11 @@ mod tests {
             "email": "john@example.com"
         });
         let masked = mask_sensitive_data(&data, r"password|email")?;
-        
+
         assert_eq!(masked["username"], "john_doe");
         assert_eq!(masked["password"], "*****");
         assert_eq!(masked["email"], "*****");
-        
+
         Ok(())
     }
 
@@ -232,7 +229,7 @@ mod tests {
 
         assert_eq!(masked["User-Agent"], "TestAgent");
         assert_eq!(masked["Authorization"], "*****");
-        
+
         Ok(())
     }
 
@@ -240,7 +237,7 @@ mod tests {
     fn test_invalid_regex() {
         let data = serde_json::json!({"key": "value"});
         let result = mask_sensitive_data(&data, r"[invalid regex");
-        
+
         assert!(result.is_err());
     }
 }

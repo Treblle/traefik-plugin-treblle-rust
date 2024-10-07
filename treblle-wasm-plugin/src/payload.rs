@@ -66,8 +66,8 @@ impl Payload {
 
     /// Updates the server information in the payload.
     /// Although this function exists here for proper & complete schema validated response,
-    /// it's not going to see much use within WASM environment. 
-    /// 
+    /// it's not going to see much use within WASM environment.
+    ///
     /// This part of payload schema is intended for SDK/middleware use.
     pub fn update_server_info(&mut self, protocol: String) {
         self.data.data.server = ServerInfo {

@@ -45,14 +45,10 @@ extern "C" {
 #[cfg(feature = "wasm")]
 pub fn host_log(level: i32, message: &str) {
     let sanitized_message = message.replace('\0', "");
-    
+
     if let Ok(c_message) = CString::new(sanitized_message) {
         unsafe {
-            log(
-                level,
-                c_message.as_ptr() as *const u8,
-                c_message.as_bytes().len() as u32,
-            );
+            log(level, c_message.as_ptr() as *const u8, c_message.as_bytes().len() as u32);
         }
     }
 }
@@ -178,22 +174,22 @@ pub fn host_read_body(body_kind: u32) -> Result<Vec<u8>> {
     }
 }
 
-/// Writes the body back to ensure the original request body is available for 
+/// Writes the body back to ensure the original request body is available for
 /// the rest of the request processing pipeline.
-/// 
-/// # Arguments 
 ///
-/// * `body_kind` - The kind of body to read (0 for request, 1 for response). 
+/// # Arguments
+///
+/// * `body_kind` - The kind of body to read (0 for request, 1 for response).
 /// * `body`: - Original body.
-/// 
+///
 /// # Returns
-/// 
+///
 /// Returns Result<(), TreblleError>
 pub fn host_write_body(body_kind: u32, body: &[u8]) -> Result<()> {
     unsafe {
         write_body(body_kind, body.as_ptr(), body.len() as u32);
     }
-    
+
     Ok(())
 }
 
@@ -222,9 +218,7 @@ fn read_from_buffer<F: Fn(*mut u8, i32) -> i32>(read_fn: F) -> Result<String> {
     let len = read_fn(buffer.as_mut_ptr(), buffer.len() as i32);
 
     if len < 0 {
-        Err(TreblleError::HostFunction(
-            "Failed to read from buffer".to_string(),
-        ))
+        Err(TreblleError::HostFunction("Failed to read from buffer".to_string()))
     } else {
         buffer.truncate(len as usize);
         String::from_utf8(buffer).map_err(|e| TreblleError::HostFunction(e.to_string()))
