@@ -3,21 +3,20 @@
 //! This module contains the main logic for processing HTTP requests and responses
 //! before sending them to the Treblle API.
 
-use std::collections::HashMap;
-use std::time::Instant;
+#[cfg(feature = "wasm")]
+use std::{collections::HashMap, time::Instant};
 
-use crate::constants::{HEADER_CONTENT_TYPE, REQUEST_KIND, RESPONSE_KIND};
-use crate::error::{Result, TreblleError};
-use crate::logger::{log, LogLevel};
-use crate::payload::Payload;
 use crate::schema::ErrorInfo;
-use crate::{BLACKLIST, CONFIG};
 
 #[cfg(feature = "wasm")]
-use crate::host_functions::*;
-
-#[cfg(feature = "wasm")]
-use crate::HTTP_CLIENT;
+use crate::{
+    constants::{HEADER_CONTENT_TYPE, REQUEST_KIND, RESPONSE_KIND},
+    error::{Result, TreblleError},
+    host_functions::*,
+    logger::{log, LogLevel},
+    payload::Payload,
+    BLACKLIST, CONFIG, HTTP_CLIENT,
+};
 
 /// The main handler for HTTP requests and responses
 pub struct HttpHandler;
@@ -205,7 +204,7 @@ impl HttpHandler {
         ErrorInfo {
             source: "response".to_string(),
             error_type: "HTTP Error".to_string(),
-            message: format!("HTTP status code: {}", status_code),
+            message: format!("HTTP status code: {status_code}"),
             file: String::new(),
             line: 0,
         }
@@ -219,13 +218,13 @@ impl HttpHandler {
         log(LogLevel::Debug, &format!("Payload JSON length: {}", payload_json.len()));
 
         let http_client = HTTP_CLIENT.lock().map_err(|e| {
-            log(LogLevel::Error, &format!("Failed to acquire HTTP_CLIENT lock: {}", e));
+            log(LogLevel::Error, &format!("Failed to acquire HTTP_CLIENT lock: {e}"));
             TreblleError::LockError(e.to_string())
         })?;
 
         http_client.post(payload_json.as_bytes(), &CONFIG.api_key).map_err(|e| {
-            log(LogLevel::Error, &format!("Failed to send data to Treblle API: {}", e));
-            TreblleError::Http(format!("Failed to send data to Treblle API: {}", e))
+            log(LogLevel::Error, &format!("Failed to send data to Treblle API: {e}"));
+            TreblleError::Http(format!("Failed to send data to Treblle API: {e}"))
         })?;
 
         log(

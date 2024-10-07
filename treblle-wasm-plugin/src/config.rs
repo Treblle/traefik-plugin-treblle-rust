@@ -7,7 +7,11 @@ use serde_json::Value;
 
 use crate::constants::{DEFAULT_SENSITIVE_KEYS_REGEX, DEFAULT_TREBLLE_API_URLS};
 use crate::error::{Result, TreblleError};
-use crate::logger::{log, LogLevel};
+
+use crate::logger::LogLevel;
+
+#[cfg(feature = "wasm")]
+use crate::logger::log;
 
 #[cfg(feature = "wasm")]
 use crate::host_functions::host_get_config;
@@ -105,8 +109,7 @@ impl Config {
             sensitive_keys_regex: value
                 .get("sensitiveKeysRegex")
                 .and_then(|v| v.as_str())
-                .map(String::from)
-                .unwrap_or_else(|| DEFAULT_SENSITIVE_KEYS_REGEX.to_string()),
+                .map_or_else(|| DEFAULT_SENSITIVE_KEYS_REGEX.to_string(), String::from),
 
             buffer_response: value
                 .get("bufferResponse")
@@ -210,9 +213,9 @@ mod tests {
             api_key: "valid_key".to_string(),
             project_id: "valid_id".to_string(),
             route_blacklist: vec![],
-            sensitive_keys_regex: "".to_string(),
+            sensitive_keys_regex: String::new(),
             buffer_response: false,
-            log_level: Default::default(),
+            log_level: LogLevel::default(),
             root_ca_path: None,
         };
 
@@ -220,12 +223,12 @@ mod tests {
 
         let invalid_config = Config {
             treblle_api_urls: vec![],
-            api_key: "".to_string(),
-            project_id: "".to_string(),
+            api_key: String::new(),
+            project_id: String::new(),
             route_blacklist: vec![],
-            sensitive_keys_regex: "".to_string(),
+            sensitive_keys_regex: String::new(),
             buffer_response: false,
-            log_level: Default::default(),
+            log_level: LogLevel::default(),
             root_ca_path: None,
         };
 
@@ -247,7 +250,7 @@ mod tests {
             let value = json!({ "logLevel": input });
             let config = Config::from_value(value);
 
-            assert!(matches!(config.log_level, _expected), "Failed for input: {}", input);
+            assert!(matches!(config.log_level, _expected), "Failed for input: {input}");
         }
     }
 

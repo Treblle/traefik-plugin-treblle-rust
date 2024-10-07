@@ -5,6 +5,12 @@ use_small_heuristics = "Max"
 # Use field initialize shorthand if possible
 use_field_init_shorthand = true
 
+comment_width = 120
+format_code_in_doc_comments = true
+imports_granularity = "Crate"
+imports_layout = "Vertical"
+wrap_comments = true
+
 # All unstable features that we wish for
 # unstable_features = true
 # version = "Two"

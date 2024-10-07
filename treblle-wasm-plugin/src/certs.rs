@@ -10,6 +10,8 @@ use std::io::BufReader;
 
 use crate::error::{Result, TreblleError};
 use crate::logger::{log, LogLevel};
+
+#[cfg(feature = "wasm")]
 use crate::CONFIG;
 
 /// Loads root certificates into the provided `RootCertStore`.
@@ -32,23 +34,24 @@ use crate::CONFIG;
 /// - The custom certificate file cannot be opened or read.
 /// - The custom certificates cannot be parsed.
 /// - The certificates cannot be added to the `RootCertStore`.
+#[cfg(feature = "wasm")]
 pub fn load_root_certs(root_store: &mut RootCertStore) -> Result<()> {
     if let Some(ca_path) = &CONFIG.root_ca_path {
         match load_custom_certificates(root_store, ca_path) {
-            Ok(_) => {
+            Ok(()) => {
                 log(LogLevel::Debug, "Custom root CA loaded successfully");
                 return Ok(());
             }
             Err(e) => {
                 log(
                     LogLevel::Error,
-                    &format!("Failed to load custom root CA: {}. Falling back to webpki-roots.", e),
+                    &format!("Failed to load custom root CA: {e}. Falling back to webpki-roots."),
                 );
             }
         }
     }
 
-    load_webpki_roots(root_store)?;
+    load_webpki_roots(root_store);
     log(LogLevel::Debug, "Webpki root certificates loaded successfully");
     Ok(())
 }
@@ -72,16 +75,16 @@ pub fn load_root_certs(root_store: &mut RootCertStore) -> Result<()> {
 /// - The certificates cannot be added to the `RootCertStore`.
 fn load_custom_certificates(root_store: &mut RootCertStore, ca_path: &str) -> Result<()> {
     let file = File::open(ca_path).map_err(|e| {
-        log(LogLevel::Error, &format!("Failed to open custom root CA file: {}", e));
-        TreblleError::Certificate(format!("Failed to open custom root CA file: {}", e))
+        log(LogLevel::Error, &format!("Failed to open custom root CA file: {e}"));
+        TreblleError::Certificate(format!("Failed to open custom root CA file: {e}"))
     })?;
 
     let mut reader = BufReader::new(file);
     let certs = rustls_pemfile::certs(&mut reader)
         .collect::<std::result::Result<Vec<_>, _>>()
         .map_err(|e| {
-            log(LogLevel::Error, &format!("Failed to parse custom root CA file: {}", e));
-            TreblleError::Certificate(format!("Failed to parse custom root CA file: {}", e))
+            log(LogLevel::Error, &format!("Failed to parse custom root CA file: {e}"));
+            TreblleError::Certificate(format!("Failed to parse custom root CA file: {e}"))
         })?;
 
     if certs.is_empty() {
@@ -93,8 +96,8 @@ fn load_custom_certificates(root_store: &mut RootCertStore, ca_path: &str) -> Re
 
     for cert in certs {
         root_store.add(&rustls::Certificate(cert.to_vec())).map_err(|e| {
-            log(LogLevel::Error, &format!("Failed to add custom root CA to store: {}", e));
-            TreblleError::Certificate(format!("Failed to add custom root CA to store: {}", e))
+            log(LogLevel::Error, &format!("Failed to add custom root CA to store: {e}"));
+            TreblleError::Certificate(format!("Failed to add custom root CA to store: {e}"))
         })?;
     }
 
@@ -110,7 +113,7 @@ fn load_custom_certificates(root_store: &mut RootCertStore, ca_path: &str) -> Re
 /// # Returns
 ///
 /// A `Result` indicating success or failure of the webpki-roots loading process.
-fn load_webpki_roots(root_store: &mut RootCertStore) -> Result<()> {
+fn load_webpki_roots(root_store: &mut RootCertStore) {
     root_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
         OwnedTrustAnchor::from_subject_spki_name_constraints(
             ta.subject,
@@ -118,8 +121,6 @@ fn load_webpki_roots(root_store: &mut RootCertStore) -> Result<()> {
             ta.name_constraints,
         )
     }));
-
-    Ok(())
 }
 
 #[cfg(test)]
@@ -129,8 +130,7 @@ mod tests {
     #[test]
     fn test_load_webpki_roots() {
         let mut root_store = RootCertStore::empty();
-        let result = load_webpki_roots(&mut root_store);
-        assert!(result.is_ok());
-        assert!(root_store.len() > 0);
+        load_webpki_roots(&mut root_store);
+        assert!(!root_store.is_empty());
     }
 }

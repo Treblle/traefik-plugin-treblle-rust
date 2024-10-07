@@ -3,12 +3,14 @@
 //! This module handles the creation and manipulation of the payload
 //! that will be sent to the Treblle API.
 
-use std::collections::HashMap;
-use std::time::Instant;
+#[cfg(feature = "wasm")]
+use std::{collections::HashMap, time::Instant};
 
 use crate::error::Result;
-use crate::schema::*;
+use crate::schema::{ErrorInfo, LanguageInfo, OsInfo, PayloadData, ServerInfo, TrebllePayload};
 use crate::utils;
+
+#[cfg(feature = "wasm")]
 use crate::CONFIG;
 
 /// Represents the payload that will be sent to the Treblle API.
@@ -21,16 +23,24 @@ impl Payload {
     pub fn new() -> Self {
         Payload {
             data: TrebllePayload {
+                #[cfg(feature = "wasm")]
                 api_key: CONFIG.api_key.clone(),
+                #[cfg(feature = "wasm")]
                 project_id: CONFIG.project_id.clone(),
+
+                #[cfg(not(feature = "wasm"))]
+                api_key: String::new(),
+                #[cfg(not(feature = "wasm"))]
+                project_id: String::new(),
                 version: 0.6,
-                sdk: "rust-wasm".to_string(),
+                sdk: "treblle-wasm-rust".to_string(),
                 data: PayloadData::default(),
             },
         }
     }
 
     /// Updates the request information in the payload.
+    #[cfg(feature = "wasm")]
     pub fn update_request_info(
         &mut self,
         method: String,
@@ -43,6 +53,7 @@ impl Payload {
     }
 
     /// Updates the response information in the payload.
+    #[cfg(feature = "wasm")]
     pub fn update_response_info(
         &mut self,
         status: u32,
@@ -103,6 +114,8 @@ pub fn is_json(content_type: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use super::*;
     use crate::config::Config;
     use crate::constants::DEFAULT_SENSITIVE_KEYS_REGEX;
@@ -142,6 +155,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "wasm")]
     fn test_update_request_info() {
         let config = create_test_config();
 

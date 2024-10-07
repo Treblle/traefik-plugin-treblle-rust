@@ -71,7 +71,7 @@ mod tests {
     fn test_error_display() {
         let error = TreblleError::Http("Not Found".to_string());
 
-        assert_eq!(format!("{}", error), "HTTP error: Not Found");
+        assert_eq!(format!("{error}"), "HTTP error: Not Found");
     }
 
     #[test]

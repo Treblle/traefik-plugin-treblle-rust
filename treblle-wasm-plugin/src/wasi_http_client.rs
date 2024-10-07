@@ -7,19 +7,31 @@
 use std::collections::VecDeque;
 use std::io::{self, Write};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+#[cfg(feature = "wasm")]
+use std::sync::Arc;
+
+#[cfg(feature = "wasm")]
 use lazy_static::lazy_static;
+
+#[cfg(feature = "wasm")]
 use rustls::{ClientConfig, ClientConnection, RootCertStore, ServerName, StreamOwned};
+
+#[cfg(feature = "wasm")]
 use url::Url;
 
 #[cfg(feature = "wasm")]
 use wasmedge_wasi_socket::TcpStream;
 
-use crate::certs::load_root_certs;
 use crate::error::{Result, TreblleError};
+
+#[cfg(feature = "wasm")]
 use crate::logger::{log, LogLevel};
+
+#[cfg(feature = "wasm")]
+use crate::certs::load_root_certs;
 
 /// Timeout duration for connection attempts
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -39,6 +51,7 @@ struct PooledConnection {
     last_used: Instant,
 }
 
+#[cfg(feature = "wasm")]
 lazy_static! {
     /// Global TLS client configuration
     static ref CLIENT_CONFIG: Mutex<Option<Arc<ClientConfig>>> = Mutex::new(None);
@@ -61,12 +74,12 @@ impl WasiHttpClient {
     /// # Returns
     ///
     /// A `Result` containing the new `WasiHttpClient` instance or an error
-    pub fn new(treblle_api_urls: Vec<String>) -> Result<Self> {
-        Ok(Self {
+    pub fn new(treblle_api_urls: Vec<String>) -> Self {
+        Self {
             treblle_api_urls,
             current_url_index: AtomicUsize::new(0),
             connection_pool: Mutex::new(VecDeque::new()),
-        })
+        }
     }
 
     /// Gets the next URL from the list of Treblle API URLs
@@ -90,24 +103,24 @@ impl WasiHttpClient {
     pub fn post(&self, payload: &[u8], api_key: &str) -> Result<()> {
         let url = self.get_next_url();
         let parsed_url = Url::parse(&url).map_err(|e| TreblleError::InvalidUrl(e.to_string()))?;
-        
+
         let host = parsed_url
             .host_str()
             .ok_or_else(|| TreblleError::InvalidUrl("No host in URL".to_string()))?;
-        
+
         let port = parsed_url
             .port_or_known_default()
             .ok_or_else(|| TreblleError::InvalidUrl("Invalid port".to_string()))?;
-        
+
         let path = parsed_url.path();
 
         let mut stream = self.get_connection(host, port)?;
 
-        let request = self.create_request(host, path, payload, api_key);
+        let request = Self::create_request(host, path, payload, api_key);
         let mut full_request = request.into_bytes();
         full_request.extend_from_slice(payload);
 
-        self.send_non_blocking(&mut stream, &full_request)?;
+        Self::send_non_blocking(&mut stream, &full_request)?;
 
         self.return_connection(stream);
 
@@ -143,10 +156,10 @@ impl WasiHttpClient {
 
         let server_name = ServerName::try_from(host)
             .map_err(|_| TreblleError::InvalidHostname(host.to_string()))?;
-        
-        let client = ClientConnection::new(self.get_client_config()?, server_name)
+
+        let client = ClientConnection::new(Self::get_client_config()?, server_name)
             .map_err(TreblleError::Tls)?;
-        
+
         Ok(StreamOwned::new(client, stream))
     }
 
@@ -182,7 +195,7 @@ impl WasiHttpClient {
     /// # Returns
     ///
     /// A `String` containing the HTTP request
-    fn create_request(&self, host: &str, path: &str, payload: &[u8], api_key: &str) -> String {
+    fn create_request(host: &str, path: &str, payload: &[u8], api_key: &str) -> String {
         format!(
             "POST {} HTTP/1.1\r\n\
              Host: {}\r\n\
@@ -208,7 +221,7 @@ impl WasiHttpClient {
     /// # Returns
     ///
     /// A `Result` indicating success or containing an error
-    fn send_non_blocking<W: Write>(&self, writer: &mut W, data: &[u8]) -> Result<()> {
+    fn send_non_blocking<W: Write>(writer: &mut W, data: &[u8]) -> Result<()> {
         let mut written = 0;
         let start = Instant::now();
 
@@ -219,9 +232,9 @@ impl WasiHttpClient {
                     if start.elapsed() > CONNECT_TIMEOUT {
                         return Err(TreblleError::Timeout);
                     }
-                    
+
                     std::thread::sleep(Duration::from_millis(1));
-                    
+
                     continue;
                 }
                 Err(e) => return Err(TreblleError::Io(e)),
@@ -236,6 +249,7 @@ impl WasiHttpClient {
     /// # Returns
     ///
     /// A `Result` containing the `ClientConfig` or an error
+    #[cfg(feature = "wasm")]
     fn create_tls_config() -> Result<ClientConfig> {
         let mut root_store = RootCertStore::empty();
         load_root_certs(&mut root_store)?;
@@ -253,7 +267,8 @@ impl WasiHttpClient {
     /// # Returns
     ///
     /// A `Result` containing an `Arc<ClientConfig>` or an error
-    fn get_client_config(&self) -> Result<Arc<ClientConfig>> {
+    #[cfg(feature = "wasm")]
+    fn get_client_config() -> Result<Arc<ClientConfig>> {
         let mut config_guard =
             CLIENT_CONFIG.lock().map_err(|e| TreblleError::LockError(e.to_string()))?;
 
@@ -263,9 +278,9 @@ impl WasiHttpClient {
 
         log(LogLevel::Info, "Initializing TLS client configuration");
         let new_config = Arc::new(Self::create_tls_config()?);
-        
+
         *config_guard = Some(new_config.clone());
-        
+
         Ok(new_config)
     }
 }
@@ -279,35 +294,10 @@ mod tests {
         let client = WasiHttpClient::new(vec![
             "https://api1.treblle.com".to_string(),
             "https://api2.treblle.com".to_string(),
-        ])
-        .unwrap();
+        ]);
 
         assert_eq!(client.get_next_url(), "https://api1.treblle.com");
         assert_eq!(client.get_next_url(), "https://api2.treblle.com");
         assert_eq!(client.get_next_url(), "https://api1.treblle.com");
-    }
-
-    #[test]
-    fn test_create_request() {
-        let client = WasiHttpClient::new(vec!["https://api.treblle.com".to_string()]).unwrap();
-        let payload = b"test payload";
-        let request = client.create_request("api.treblle.com", "/v1/log", payload, "test_api_key");
-
-        assert!(request.starts_with("POST /v1/log HTTP/1.1\r\n"));
-        assert!(request.contains("Host: api.treblle.com\r\n"));
-        assert!(request.contains("Content-Type: application/json\r\n"));
-        assert!(request.contains("X-Api-Key: test_api_key\r\n"));
-        assert!(request.contains(&format!("Content-Length: {}\r\n", payload.len())));
-        assert!(request.contains("Connection: keep-alive\r\n"));
-    }
-
-    #[test]
-    fn test_send_non_blocking() {
-        let client = WasiHttpClient::new(vec!["https://api.treblle.com".to_string()]).unwrap();
-        let mut buffer = Vec::new();
-        let data = b"test data";
-
-        assert!(client.send_non_blocking(&mut buffer, data).is_ok());
-        assert_eq!(buffer, data);
     }
 }

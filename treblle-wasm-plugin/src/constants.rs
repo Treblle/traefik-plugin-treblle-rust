@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#![allow(dead_code, unused_variables)]
 
 pub const LOG_LEVEL_DEBUG: i32 = -1;
 pub const LOG_LEVEL_INFO: i32 = 0;

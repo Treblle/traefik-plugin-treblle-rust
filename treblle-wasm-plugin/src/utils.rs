@@ -23,6 +23,7 @@ use crate::schema::{RequestInfo, ResponseInfo};
 ///
 /// Returns a `Result<RequestInfo>` containing the processed request information,
 /// or an error if processing fails.
+#[cfg(feature = "wasm")]
 pub fn parse_request(
     method: String,
     uri: String,
@@ -62,6 +63,7 @@ pub fn parse_request(
 ///
 /// Returns a `Result<ResponseInfo>` containing the processed response information,
 /// or an error if processing fails.
+#[cfg(feature = "wasm")]
 pub fn parse_response(
     status: u32,
     headers: std::collections::HashMap<String, String>,
@@ -107,7 +109,7 @@ pub fn parse_json_body(body: &[u8]) -> Value {
 /// Returns a `Result<Value>` containing the masked JSON value,
 /// or an error if the regex pattern is invalid.
 pub fn mask_sensitive_data(data: &Value, sensitive_keys_regex: &str) -> Result<Value> {
-    let re = Regex::new(sensitive_keys_regex).map_err(|e| TreblleError::Regex(e))?;
+    let re = Regex::new(sensitive_keys_regex).map_err(TreblleError::Regex)?;
 
     Ok(match data {
         Value::Object(map) => {
@@ -145,7 +147,7 @@ pub fn mask_sensitive_headers(
     headers: &std::collections::HashMap<String, String>,
     sensitive_keys_regex: &str,
 ) -> Result<std::collections::HashMap<String, String>> {
-    let re = Regex::new(sensitive_keys_regex).map_err(|e| TreblleError::Regex(e))?;
+    let re = Regex::new(sensitive_keys_regex).map_err(TreblleError::Regex)?;
 
     Ok(headers
         .iter()

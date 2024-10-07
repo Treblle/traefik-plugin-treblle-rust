@@ -10,6 +10,8 @@ use std::sync::atomic::{AtomicI32, Ordering};
 use crate::constants::{
     LOG_LEVEL_DEBUG, LOG_LEVEL_ERROR, LOG_LEVEL_INFO, LOG_LEVEL_NONE, LOG_LEVEL_WARN,
 };
+
+#[cfg(feature = "wasm")]
 use crate::CONFIG;
 
 #[cfg(feature = "wasm")]
