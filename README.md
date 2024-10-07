@@ -2,6 +2,25 @@
 
 A middleware plugin for Traefik that integrates Treblle's API monitoring and logging services. Built in Rust and compiled to WebAssembly (WASM) for high performance and compatibility with Traefik v3.1 or newer, using either `wasm-wasi` or `wasm-wasi1p` as the target.
 
+## Stay in tune with your APIs
+
+Treblle makes it super easy to understand what's going on with your APIs and the apps that use them.
+
+### With Treblle
+
+- Auto-generated and updated docs
+- Self service integration support
+- Get in-depth API insights
+- 90% less meetings
+- Complete API analytics
+- Complete picture of your API
+- 1 single awesome service
+- Know exactly what's ok and what not
+- Quality score of your API
+- 1 click testing
+- Device detection
+- Endpoint grouping
+
 ## Overview
 
 The plugin collects data from Traefik's request/response lifecycle, masks sensitive information, and sends the sanitized data to Treblle's API for monitoring. This plugin is designed to be lightweight, efficient, and easy to install through the Traefik catalog.
@@ -122,6 +141,8 @@ The Traefik configuration is defined in `traefik.yml` and `traefik_dynamic.yml`.
 
 ### Plugin Configuration
 
+Go to [Treblle.com](https://treblle.com/) register and create a project, copy your `project_id` and go and get your `api_key` from settings.
+
 The plugin configuration is located in `traefik_dynamic.yml` under the `http.middlewares.treblle-middleware.plugin.treblle` section. You can adjust the following settings:
 
 - `treblleApiUrls`: List of URLs of the Treblle API to be used in round-robin fashion.
@@ -129,6 +150,10 @@ The plugin configuration is located in `traefik_dynamic.yml` under the `http.mid
 - `projectId`: Your Treblle project ID
 - `routeBlacklist`: List of routes to exclude from processing (e.g., ["/blacklisted-example"])
 - `sensitiveKeysRegex`: Regex pattern for masking sensitive data
+- `bufferResponse`: Enables buffering of response on Traefik, which also enables plugin to parse response body
+- `rootCaPath`: Path to the root CA certificate file for the Treblle API, if not provided, default CA provided by middleware will be used
+  - for this rooth path to work, `localPlugins.treblle.settings.mounts` directory must be configured and mounted to the container
+- `logLevel`: Log level for the plugin, logs will be sent to Traefik logs
 
 #### Example configuration
 
@@ -143,6 +168,9 @@ http:
             routeBlacklist:
                ["/ping", "/healthcheck", "/blacklisted-example"]
             sensitiveKeysRegex: "(?i)(password|pwd|secret|password_confirmation|cc|card_number|ccv|ssn|credit_score)"
+            bufferResponse: false
+            logLevel: "info"
+            rootCaPath: "/etc/certs/rootCA.pem"
 ```
 
 ## Usage
